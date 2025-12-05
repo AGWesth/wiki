@@ -126,8 +126,7 @@ We tried to load the markdown file for this article, but couldn't find it.
                 .replace(/```([\s\S]*?)```/gim, '<pre class="bg-slate-900 text-slate-50 p-4 rounded-lg overflow-x-auto my-6 font-mono text-sm shadow-inner"><code>$1</code></pre>')
                 .replace(/`([^`]+)`/gim, '<code class="bg-slate-100 dark:bg-slate-800 text-pink-600 dark:text-pink-400 px-1.5 py-0.5 rounded font-mono text-sm border border-slate-200 dark:border-slate-700">$1</code>')
                 
-                // 6. Embed Syntax: [[embed:path/to/file.html|height?]]
-                // Updated to accept optional height parameter (e.g. [[embed:file.html|800]])
+                // 6. Embed Syntax
                 .replace(/\[\[embed:([^|\]]+)(?:\|(\d+))?\]\]/g, (match, path, height) => {
                     const embedHeight = height ? `${height}px` : '600px';
                     return `
@@ -151,24 +150,30 @@ We tried to load the markdown file for this article, but couldn't find it.
                     `;
                 })
 
-                // 7. Links
+                // 7. IMAGES (New Feature)
+                // Looks for ![Alt](Url) and styles it nicely.
+                // Mobile: Centered. Desktop: Floats left so text wraps around it.
+                .replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" class="w-48 mx-auto md:mx-0 md:float-left md:mr-8 md:mb-4 rounded-lg shadow-lg object-cover bg-slate-100 dark:bg-slate-800 transition-transform hover:scale-[1.02]" />')
+
+                // 8. Links
                 .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1">$1 <span class="text-[10px] opacity-70">↗</span></a>')
                 .replace(/\[\[(.*?)\]\]/g, '<a href="#" data-wiki-link="$1" class="text-indigo-600 dark:text-indigo-400 hover:underline font-medium bg-indigo-50 dark:bg-indigo-900/30 px-1 rounded transition-colors">$1</a>')
                 .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="#" data-wiki-link="$2" class="text-indigo-600 dark:text-indigo-400 hover:underline font-medium transition-colors">$1</a>')
                 
-                // 8. Lists
+                // 9. Lists
                 .replace(/^\s*-\s+(.*)/gim, '<li class="ml-4 list-disc marker:text-indigo-400 mb-1">$1</li>')
-                .replace(/(<li.*<\/li>)/gim, '<ul class="my-4 pl-4">$1</ul>')
-                .replace(/<\/ul><ul class="my-4 pl-4">/g, '');
+                .replace(/(<li.*<\/li>)/gim, '<ul class="my-4 pl-4 overflow-hidden">$1</ul>') // Added overflow-hidden to fix float clearing issues
+                .replace(/<\/ul><ul class="my-4 pl-4 overflow-hidden">/g, '');
 
-            // 9. Paragraphs
+            // 10. Paragraphs
             const parts = html.split(/\n\n/);
             html = parts.map(part => {
-                if (part.trim().match(/^<(h|ul|pre|blockquote|div)/)) return part;
-                return `<p class="mb-4 leading-relaxed text-slate-600 dark:text-slate-300">${part}</p>`;
+                if (part.trim().match(/^<(h|ul|pre|blockquote|div|img)/)) return part;
+                return `<p class="mb-4 leading-relaxed text-slate-600 dark:text-slate-300 clear-none">${part}</p>`;
             }).join('\n');
 
-            return html;
+            // Add a "clear fix" at the end to ensure the container expands if the image is taller than text
+            return html + '<div class="clear-both"></div>';
         };
 
         // --- COMPONENTS ---
