@@ -1,0 +1,30 @@
+[
+  { 
+    "id": "welcome", 
+    "title": "Welcome to Your Wiki", 
+    "category": "Meta", 
+    "path": "welcome.md", 
+    "description": "Getting started guide and system overview."
+  },
+  { 
+    "id": "goals-2025", 
+    "title": "2025 Vision & Goals", 
+    "category": "Personal", 
+    "path": "goals.md", 
+    "description": "Strategic planning for the upcoming year."
+  },
+  { 
+    "id": "react-notes", 
+    "title": "React Patterns", 
+    "category": "Engineering", 
+    "path": "react-patterns.md", 
+    "description": "Collection of useful hooks and component patterns."
+  },
+  { 
+    "id": "finance", 
+    "title": "Financial Independence", 
+    "category": "Finance", 
+    "path": "fire-plan.md", 
+    "description": "Investment strategies and savings rate tracking."
+  }
+]
