@@ -3,8 +3,11 @@
 ![Cover](https://m.media-amazon.com/images/I/81ukWaZOOlL._SL1500_.jpg)
 
 Author: Andreas Westh
+
 Year: 2024
+
 Rating: ⭐⭐⭐⭐⭐
+
 Status: Reading
 
 ## Summary
