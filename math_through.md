@@ -1,6 +1,6 @@
 #  Math Through The Ages
 
-![Cover](https://www.amazon.com/Math-Through-Ages-Teachers-Mathematics/dp/0486832848)
+![Cover](https://m.media-amazon.com/images/I/81ukWaZOOlL._SL1500_.jpg)
 
 Author: Andreas Westh
 Year: 2024
