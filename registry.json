@@ -1,5 +1,12 @@
 [
   { 
+    "id": "math-through", 
+    "title": "Book Math through the ages", 
+    "category": "Book", 
+    "path": "math_throug.md", 
+    "description": "The history of mathematics"
+  },
+  { 
     "id": "math-through-the-ages", 
     "title": "Math through the ages", 
     "category": "Mathematics", 
