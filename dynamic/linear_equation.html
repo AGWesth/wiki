@@ -1,1 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linear Equation Explorer</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for the graph -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- MathJax for nice equations -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Custom range slider styling */
+        input[type=range] {
+            -webkit-appearance: none; 
+            width: 100%; 
+            background: transparent; 
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
 
+    <!-- Main Container -->
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col md:flex-row">
+        
+        <!-- Controls & Info Panel -->
+        <div class="w-full md:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Linear Explorer</h1>
+                <p class="text-sm text-slate-500 mb-6">Master the behavior of linear equations.</p>
+
+                <!-- Equation Display -->
+                <div class="bg-blue-600 text-white p-4 rounded-xl shadow-lg mb-8 text-center">
+                    <div id="equation-display" class="text-2xl font-mono">
+                        \[ y = 1x + 0 \]
+                    </div>
+                </div>
+
+                <!-- Sliders -->
+                <div class="space-y-6">
+                    <!-- Slope (a) -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-semibold text-slate-700">Slope (a)</label>
+                            <span id="val-a" class="text-blue-600 font-bold">1.0</span>
+                        </div>
+                        <input type="range" id="slider-a" min="-5" max="5" step="0.1" value="1">
+                        <p class="text-xs text-slate-400 mt-1">Controls steepness & direction.</p>
+                    </div>
+
+                    <!-- Intercept (b) -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-semibold text-slate-700">Intercept (b)</label>
+                            <span id="val-b" class="text-purple-600 font-bold">0.0</span>
+                        </div>
+                        <input type="range" id="slider-b" min="-10" max="10" step="0.5" value="0">
+                        <p class="text-xs text-slate-400 mt-1">Controls vertical shift.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- "Teach to Learn" Note -->
+            <div class="mt-8 pt-6 border-t border-slate-200">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Concept Recall</h3>
+                <p class="text-xs text-slate-600 leading-relaxed">
+                    <span class="font-bold text-blue-600">Slope (a)</span> represents the rate of change. 
+                    <br>
+                    <span class="font-bold text-purple-600">Intercept (b)</span> is the starting value when x is 0.
+                </p>
+            </div>
+        </div>
+
+        <!-- Graph Panel -->
+        <div class="w-full md:w-2/3 p-4 md:p-8 flex items-center justify-center bg-white relative">
+            <div class="w-full h-80 md:h-96 relative">
+                <canvas id="equationChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. Setup Data & Config ---
+        const ctx = document.getElementById('equationChart').getContext('2d');
+        
+        // Generate X values from -10 to 10
+        const xValues = [];
+        for (let i = -10; i <= 10; i++) {
+            xValues.push(i);
+        }
+
+        // Initial Data Calculation (y = 1x + 0)
+        let a = 1;
+        let b = 0;
+        
+        function calculateY(a, b, x) {
+            return (a * x) + b;
+        }
+
+        const data = {
+            labels: xValues,
+            datasets: [{
+                label: 'y = ax + b',
+                data: xValues.map(x => calculateY(a, b, x)),
+                borderColor: '#3b82f6', // Tailwind blue-500
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                borderWidth: 3,
+                tension: 0, // Straight lines
+                pointRadius: 0, // Hide points for a cleaner line
+                pointHoverRadius: 6
+            }]
+        };
+
+        const config = {
+            type: 'line',
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: {
+                    duration: 0 // meaningful performance boost for sliders
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'x axis' },
+                        grid: { color: '#e2e8f0' },
+                        ticks: { color: '#64748b' }
+                    },
+                    y: {
+                        title: { display: true, text: 'y axis' },
+                        min: -20, // Fix the axis so the line moves, not the grid
+                        max: 20,
+                        grid: { color: '#e2e8f0' },
+                        ticks: { color: '#64748b' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                    }
+                }
+            }
+        };
+
+        // --- 2. Initialize Chart ---
+        const myChart = new Chart(ctx, config);
+
+        // --- 3. Interactive Logic ---
+        const sliderA = document.getElementById('slider-a');
+        const sliderB = document.getElementById('slider-b');
+        const valA = document.getElementById('val-a');
+        const valB = document.getElementById('val-b');
+        const eqDisplay = document.getElementById('equation-display');
+
+        function updateChart() {
+            // Get current values
+            a = parseFloat(sliderA.value);
+            b = parseFloat(sliderB.value);
+
+            // Update displays
+            valA.textContent = a.toFixed(1);
+            valB.textContent = b.toFixed(1);
+
+            // Format Equation string
+            const sign = b >= 0 ? '+' : '-';
+            const bAbs = Math.abs(b);
+            // LaTeX format for MathJax
+            const latex = `\\[ y = ${a}x ${sign} ${bAbs} \\]`;
+            eqDisplay.innerHTML = latex;
+            // Retrigger MathJax to render the new equation
+            if(window.MathJax) {
+                MathJax.typesetPromise([eqDisplay]);
+            }
+
+            // Recalculate Y values
+            const newY = xValues.map(x => calculateY(a, b, x));
+            
+            // Update Chart Data
+            myChart.data.datasets[0].data = newY;
+            myChart.update();
+        }
+
+        // Listeners
+        sliderA.addEventListener('input', updateChart);
+        sliderB.addEventListener('input', updateChart);
+
+        // Initial MathJax render
+        window.addEventListener('load', () => {
+             if(window.MathJax) {
+                MathJax.typeset();
+            }
+        });
+
+    </script>
+</body>
+</html>
