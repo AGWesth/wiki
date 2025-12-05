@@ -1,5 +1,12 @@
 [
   { 
+    "id": "math-through-the-ages", 
+    "title": "Math through the ages", 
+    "category": "Mathematics", 
+    "path": "math_through_the_ages.md", 
+    "description": "The history of mathematics"
+  },
+  { 
     "id": "welcome", 
     "title": "Welcome to Your Wiki", 
     "category": "Meta", 
