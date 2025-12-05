@@ -11,79 +11,43 @@ import {
   AlertCircle,
   Github,
   PenTool,
-  Link as LinkIcon
+  Loader
 } from 'lucide-react';
 
-// --- CONFIGURATION ---
-// Add your markdown files here. 
-// The 'path' should be relative to this index.html file.
-const ARTICLE_REGISTRY = [
+// --- FALLBACK / DEMO DATA ---
+// Used if registry.json cannot be loaded (e.g., file not created yet)
+const DEMO_REGISTRY = [
   { 
-    id: 'welcome', 
-    title: 'Welcome to Your Wiki', 
-    category: 'Meta', 
+    id: 'demo-welcome', 
+    title: 'Welcome (Demo Mode)', 
+    category: 'System', 
     path: 'welcome.md', 
-    description: 'Getting started guide and system overview.'
-  },
-  { 
-    id: 'goals-2025', 
-    title: '2025 Vision & Goals', 
-    category: 'Personal', 
-    path: 'goals.md', 
-    description: 'Strategic planning for the upcoming year.'
-  },
-  { 
-    id: 'react-notes', 
-    title: 'React Patterns', 
-    category: 'Mathematics', 
-    path: 'react-patterns.md', 
-    description: 'Collection of useful hooks and component patterns.'
-  },
-  { 
-    id: 'finance', 
-    title: 'Financial Independence', 
-    category: 'Finance', 
-    path: 'fire-plan.md', 
-    description: 'Investment strategies and savings rate tracking.'
-  },
+    description: 'The registry.json file was not found.'
+  }
 ];
 
-// --- MOCK DATA FOR DEMO PURPOSES ---
 const FALLBACK_CONTENT = {
-  'welcome': `# Welcome to Your Personal Wiki
+  'demo-welcome': `# Setup Required
 
-This is a **beautiful**, lightweight knowledge base that lives entirely in your browser.
+It looks like **registry.json** is missing or cannot be loaded.
 
-## Internal Linking
-You can now link to other pages easily!
-- **Wiki Style**: Use double brackets like this: [[goals-2025]]
-- **Standard Style**: Use normal markdown links like this: [See my 2025 Goals](goals-2025)
+## How to fix this
+1. Create a file named \`registry.json\` in this folder.
+2. Paste your article configuration array into it.
+3. Refresh this page.
 
-## How it works
-1. **Create Markdown Files**: Write your notes in your favorite editor (VS Code, Obsidian, etc.) and save them as \`.md\` files in this folder.
-2. **Register Them**: Open the source code of this page and add your file to the \`ARTICLE_REGISTRY\` list.
-3. **View**: Refresh this page. Your content will appear here!
-
-## Features
-* Dark / Light Mode
-* Instant Search
-* **Internal Linking** (New!)
-* Responsive Design
-
-> "The simpler the better." - Unknown
-  `,
-  'goals-2025': `# 2025 Vision
-
-## Core Principles
-1. **Pay Myself First**: Prioritizing health and wealth. See [[finance]] for details.
-2. **Write to Learn**: Explaining concepts to solidify understanding.
-3. **The Future is Digital**: Embracing CS and Data Science.
-
-## The 10x Engineer
-Focusing on deep mastery of:
-- Mathematics
-- Science
-- System Design (See [[react-notes]])
+## Example registry.json
+\`\`\`json
+[
+  {
+    "id": "my-first-note",
+    "title": "My First Note",
+    "category": "Personal",
+    "path": "notes.md",
+    "description": "A description of the note."
+  }
+]
+\`\`\`
   `,
   'default': `# File Not Found
 
@@ -91,54 +55,31 @@ We tried to load the markdown file for this article, but couldn't find it.
 
 ### Troubleshooting
 1. **Local Security**: If you opened this file directly (file://), browsers block loading external files. Try running a local server (e.g. \`npx serve\`).
-2. **Check Paths**: Ensure the filename in \`ARTICLE_REGISTRY\` matches your actual file exactly.
+2. **Check Paths**: Ensure the filename in \`registry.json\` matches your actual file exactly.
   `
 };
 
-// --- MARKDOWN PARSER (Lightweight) ---
+// --- MARKDOWN PARSER ---
 const parseMarkdown = (text) => {
   if (!text) return '';
   
   let html = text
-    // Sanitize basic
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    
-    // Headers
     .replace(/^# (.*$)/gim, '<h1 class="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-6 pb-2 border-b border-slate-200 dark:border-slate-700">$1</h1>')
     .replace(/^## (.*$)/gim, '<h2 class="text-2xl font-semibold text-slate-800 dark:text-slate-200 mt-8 mb-4">$1</h2>')
     .replace(/^### (.*$)/gim, '<h3 class="text-xl font-medium text-slate-800 dark:text-slate-200 mt-6 mb-3">$1</h3>')
-    
-    // Blockquotes
     .replace(/^\> (.*$)/gim, '<blockquote class="border-l-4 border-indigo-500 pl-4 italic text-slate-600 dark:text-slate-400 my-4 py-1 bg-slate-50 dark:bg-slate-800/50 rounded-r">$1</blockquote>')
-    
-    // Bold / Italic
     .replace(/\*\*(.*)\*\*/gim, '<strong class="font-bold text-indigo-600 dark:text-indigo-400">$1</strong>')
     .replace(/\*(.*)\*/gim, '<em class="italic">$1</em>')
-    
-    // Code Blocks (Basic)
     .replace(/```([\s\S]*?)```/gim, '<pre class="bg-slate-900 text-slate-50 p-4 rounded-lg overflow-x-auto my-6 font-mono text-sm shadow-inner"><code>$1</code></pre>')
-    
-    // Inline Code
     .replace(/`([^`]+)`/gim, '<code class="bg-slate-100 dark:bg-slate-800 text-pink-600 dark:text-pink-400 px-1.5 py-0.5 rounded font-mono text-sm border border-slate-200 dark:border-slate-700">$1</code>')
-    
-    // --- LINKS ---
-    // 1. External Links (http/https) - Standard behavior, opens in new tab
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1">$1 <span class="text-[10px] opacity-70">↗</span></a>')
-
-    // 2. Wiki Style Links [[id]] - Converts [[id]] to an internal link
     .replace(/\[\[(.*?)\]\]/g, '<a href="#" data-wiki-link="$1" class="text-indigo-600 dark:text-indigo-400 hover:underline font-medium bg-indigo-50 dark:bg-indigo-900/30 px-1 rounded transition-colors">$1</a>')
-
-    // 3. Standard Internal Links [Label](id) - Converts [Label](id) to internal link
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="#" data-wiki-link="$2" class="text-indigo-600 dark:text-indigo-400 hover:underline font-medium transition-colors">$1</a>')
-    
-    // Lists (Unordered)
     .replace(/^\s*-\s+(.*)/gim, '<li class="ml-4 list-disc marker:text-indigo-400 mb-1">$1</li>')
-    // Wrap lists in ul (simple heuristic)
     .replace(/(<li.*<\/li>)/gim, '<ul class="my-4 pl-4">$1</ul>')
-    // Fix double ul wrapping
     .replace(/<\/ul><ul class="my-4 pl-4">/g, '');
 
-  // Paragraphs
   const parts = html.split(/\n\n/);
   html = parts.map(part => {
     if (part.trim().match(/^<(h|ul|pre|blockquote)/)) return part;
@@ -193,54 +134,58 @@ const CategorySection = ({ title, articles, currentArticle, onSelect }) => {
 };
 
 export default function PersonalWiki() {
-  const [activeArticle, setActiveArticle] = useState(ARTICLE_REGISTRY[0]);
+  const [registry, setRegistry] = useState([]);
+  const [registryLoaded, setRegistryLoaded] = useState(false);
+  const [activeArticle, setActiveArticle] = useState(null);
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState(false);
+  const [registryError, setRegistryError] = useState(false);
 
-  // Group articles by category
-  const groupedArticles = useMemo(() => {
-    const filtered = ARTICLE_REGISTRY.filter(a => 
-      a.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      a.description.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-    
-    const groups = {};
-    filtered.forEach(article => {
-      const cat = article.category || 'Uncategorized';
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(article);
-    });
-    return groups;
-  }, [searchQuery]);
-
-  // Handle internal wiki link clicks
-  const handleContentClick = (e) => {
-    // Check if the clicked element or its parent is a wiki link
-    const link = e.target.closest('a[data-wiki-link]');
-    if (link) {
-      e.preventDefault();
-      const id = link.getAttribute('data-wiki-link');
-      const targetArticle = ARTICLE_REGISTRY.find(a => a.id === id);
-      
-      if (targetArticle) {
-        setActiveArticle(targetArticle);
-      } else {
-        console.warn(`Wiki: Article with id "${id}" not found.`);
-        // You could add a toast notification here if desired
-      }
-    }
-  };
-
-  // Fetch content
+  // 1. Load Registry on Mount
   useEffect(() => {
+    const fetchRegistry = async () => {
+      try {
+        const response = await fetch('./registry.json');
+        if (!response.ok) throw new Error('Failed to load registry');
+        const data = await response.json();
+        
+        if (Array.isArray(data) && data.length > 0) {
+          setRegistry(data);
+          setActiveArticle(data[0]);
+          setRegistryLoaded(true);
+        } else {
+          throw new Error('Registry is empty');
+        }
+      } catch (err) {
+        console.warn('Wiki: Could not load registry.json', err);
+        setRegistryError(true);
+        setRegistry(DEMO_REGISTRY);
+        setActiveArticle(DEMO_REGISTRY[0]);
+        setRegistryLoaded(true);
+      }
+    };
+    fetchRegistry();
+  }, []);
+
+  // 2. Load Article Content when activeArticle changes
+  useEffect(() => {
+    if (!activeArticle) return;
+
     const loadContent = async () => {
       setLoading(true);
       setError(false);
       setContent('');
+
+      // If we are in registry fallback mode, don't try to fetch real files unless they exist in demo
+      if (registryError && activeArticle.id === 'demo-welcome') {
+        setContent(parseMarkdown(FALLBACK_CONTENT['demo-welcome']));
+        setLoading(false);
+        return;
+      }
 
       try {
         const response = await fetch(activeArticle.path);
@@ -253,10 +198,10 @@ export default function PersonalWiki() {
           throw new Error('File not found');
         }
       } catch (err) {
-        console.warn('Wiki: Could not fetch file, using fallback.', err);
-        const fallback = FALLBACK_CONTENT[activeArticle.id] || FALLBACK_CONTENT['default'];
+        console.warn('Wiki: Could not fetch file.', err);
+        const fallback = FALLBACK_CONTENT['default'];
         setContent(parseMarkdown(fallback));
-        if (!FALLBACK_CONTENT[activeArticle.id]) setError(true);
+        setError(true);
       } finally {
         setLoading(false);
       }
@@ -267,9 +212,43 @@ export default function PersonalWiki() {
     if (window.innerWidth < 768) {
       setSidebarOpen(false);
     }
-  }, [activeArticle]);
+  }, [activeArticle, registryError]);
 
-  // Handle Dark Mode toggle
+  // Group articles by category
+  const groupedArticles = useMemo(() => {
+    if (!registryLoaded) return {};
+    
+    const filtered = registry.filter(a => 
+      a.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      a.description.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    
+    const groups = {};
+    filtered.forEach(article => {
+      const cat = article.category || 'Uncategorized';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(article);
+    });
+    return groups;
+  }, [registry, searchQuery, registryLoaded]);
+
+  // Handle internal wiki link clicks
+  const handleContentClick = (e) => {
+    const link = e.target.closest('a[data-wiki-link]');
+    if (link) {
+      e.preventDefault();
+      const id = link.getAttribute('data-wiki-link');
+      const targetArticle = registry.find(a => a.id === id);
+      
+      if (targetArticle) {
+        setActiveArticle(targetArticle);
+      } else {
+        console.warn(`Wiki: Article with id "${id}" not found.`);
+      }
+    }
+  };
+
+  // Handle Dark Mode
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
@@ -277,6 +256,19 @@ export default function PersonalWiki() {
       document.documentElement.classList.remove('dark');
     }
   }, [darkMode]);
+
+  // --- RENDER ---
+  
+  if (!registryLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 text-slate-400">
+        <div className="flex flex-col items-center gap-4">
+          <Loader className="animate-spin" size={32} />
+          <p>Loading Wiki Configuration...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen flex flex-col md:flex-row transition-colors duration-300 ${darkMode ? 'bg-slate-900 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
@@ -330,6 +322,15 @@ export default function PersonalWiki() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 pb-6 custom-scrollbar">
+          {registryError && (
+             <div className="px-4 mb-4">
+               <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 p-3 rounded text-xs border border-amber-200 dark:border-amber-800">
+                 <strong>Setup Mode</strong><br/>
+                 Could not load <code>registry.json</code>. Showing demo content.
+               </div>
+             </div>
+          )}
+          
           {Object.entries(groupedArticles).map(([category, articles]) => (
             <CategorySection 
               key={category} 
@@ -350,7 +351,7 @@ export default function PersonalWiki() {
         <div className="p-4 border-t border-slate-200 dark:border-slate-800">
            <div className="bg-indigo-50 dark:bg-slate-800 rounded-lg p-3 text-xs text-slate-600 dark:text-slate-400 flex gap-2">
              <AlertCircle size={16} className="text-indigo-500 shrink-0" />
-             <p>Add new articles by editing the <code>ARTICLE_REGISTRY</code> array in the source code.</p>
+             <p>Edit <code>registry.json</code> to add new articles.</p>
            </div>
         </div>
       </aside>
@@ -371,11 +372,13 @@ export default function PersonalWiki() {
         <div className="max-w-4xl mx-auto px-6 py-12 md:py-20 min-h-full flex flex-col">
           
           {/* Breadcrumbs */}
-          <div className="flex items-center gap-2 text-sm text-slate-400 mb-6">
-            <span>{activeArticle.category}</span>
-            <ChevronRight size={14} />
-            <span className="text-indigo-600 dark:text-indigo-400 font-medium">{activeArticle.title}</span>
-          </div>
+          {activeArticle && (
+            <div className="flex items-center gap-2 text-sm text-slate-400 mb-6">
+              <span>{activeArticle.category}</span>
+              <ChevronRight size={14} />
+              <span className="text-indigo-600 dark:text-indigo-400 font-medium">{activeArticle.title}</span>
+            </div>
+          )}
 
           {/* Loading State */}
           {loading ? (
@@ -385,7 +388,6 @@ export default function PersonalWiki() {
               <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-2/3"></div>
             </div>
           ) : (
-            // Added onClick handler here for link interception
             <article 
               className="prose prose-slate dark:prose-invert lg:prose-lg max-w-none"
               onClick={handleContentClick}
