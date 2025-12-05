@@ -41,10 +41,6 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
         .dark .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #334155; }
         
-        /* Hide scrollbar for embeds but allow scrolling */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
         /* Smooth transitions */
         body { transition: background-color 0.3s, color 0.3s; }
     </style>
@@ -131,11 +127,17 @@ We tried to load the markdown file for this article, but couldn't find it.
                 .replace(/`([^`]+)`/gim, '<code class="bg-slate-100 dark:bg-slate-800 text-pink-600 dark:text-pink-400 px-1.5 py-0.5 rounded font-mono text-sm border border-slate-200 dark:border-slate-700">$1</code>')
                 
                 // 6. Embed Syntax: [[embed:path/to/file.html]]
-                // Updated to include "no-scrollbar" class
+                // Updated with 'onload' script to force hide scrollbars inside the iframe content
                 .replace(/\[\[embed:(.*?)\]\]/g, `
                     <div class="my-6">
                         <div class="w-full h-[600px] border border-slate-200 dark:border-slate-700 rounded-t-lg bg-white overflow-hidden relative">
-                            <iframe src="$1" class="w-full h-full no-scrollbar" title="Embedded Content" style="border:0"></iframe>
+                            <iframe 
+                                src="$1" 
+                                class="w-full h-full" 
+                                title="Embedded Content" 
+                                style="border:0"
+                                onload="try{const d=this.contentWindow.document;const s=d.createElement('style');s.textContent='::-webkit-scrollbar{display:none}body{-ms-overflow-style:none;scrollbar-width:none}';d.head.appendChild(s);}catch(e){}"
+                            ></iframe>
                         </div>
                         <div class="bg-slate-100 dark:bg-slate-800 border-x border-b border-slate-200 dark:border-slate-700 rounded-b-lg px-4 py-2 flex justify-between items-center">
                             <span class="text-xs text-slate-400 font-mono">$1</span>
@@ -159,7 +161,7 @@ We tried to load the markdown file for this article, but couldn't find it.
             // 9. Paragraphs
             const parts = html.split(/\n\n/);
             html = parts.map(part => {
-                if (part.trim().match(/^<(h|ul|pre|blockquote|div)/)) return part; // Added div to skip P wrapping for iframes
+                if (part.trim().match(/^<(h|ul|pre|blockquote|div)/)) return part;
                 return `<p class="mb-4 leading-relaxed text-slate-600 dark:text-slate-300">${part}</p>`;
             }).join('\n');
 
