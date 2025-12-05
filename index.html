@@ -107,25 +107,42 @@ We tried to load the markdown file for this article, but couldn't find it.
             if (!text) return '';
             
             let html = text
+                // 1. Sanitize Basic
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                
+                // 2. Headers
                 .replace(/^# (.*$)/gim, '<h1 class="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-6 pb-2 border-b border-slate-200 dark:border-slate-700">$1</h1>')
                 .replace(/^## (.*$)/gim, '<h2 class="text-2xl font-semibold text-slate-800 dark:text-slate-200 mt-8 mb-4">$1</h2>')
                 .replace(/^### (.*$)/gim, '<h3 class="text-xl font-medium text-slate-800 dark:text-slate-200 mt-6 mb-3">$1</h3>')
+                
+                // 3. Blockquotes
                 .replace(/^\> (.*$)/gim, '<blockquote class="border-l-4 border-indigo-500 pl-4 italic text-slate-600 dark:text-slate-400 my-4 py-1 bg-slate-50 dark:bg-slate-800/50 rounded-r">$1</blockquote>')
+                
+                // 4. Bold / Italic
                 .replace(/\*\*(.*)\*\*/gim, '<strong class="font-bold text-indigo-600 dark:text-indigo-400">$1</strong>')
                 .replace(/\*(.*)\*/gim, '<em class="italic">$1</em>')
+                
+                // 5. Code Blocks
                 .replace(/```([\s\S]*?)```/gim, '<pre class="bg-slate-900 text-slate-50 p-4 rounded-lg overflow-x-auto my-6 font-mono text-sm shadow-inner"><code>$1</code></pre>')
                 .replace(/`([^`]+)`/gim, '<code class="bg-slate-100 dark:bg-slate-800 text-pink-600 dark:text-pink-400 px-1.5 py-0.5 rounded font-mono text-sm border border-slate-200 dark:border-slate-700">$1</code>')
+                
+                // 6. Embed Syntax: [[embed:path/to/file.html]]
+                .replace(/\[\[embed:(.*?)\]\]/g, '<div class="my-6 w-full h-[600px]"><iframe src="$1" class="w-full h-full border border-slate-200 dark:border-slate-700 rounded-lg bg-white" title="Embedded Content"></iframe></div>')
+
+                // 7. Links
                 .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1">$1 <span class="text-[10px] opacity-70">↗</span></a>')
                 .replace(/\[\[(.*?)\]\]/g, '<a href="#" data-wiki-link="$1" class="text-indigo-600 dark:text-indigo-400 hover:underline font-medium bg-indigo-50 dark:bg-indigo-900/30 px-1 rounded transition-colors">$1</a>')
                 .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="#" data-wiki-link="$2" class="text-indigo-600 dark:text-indigo-400 hover:underline font-medium transition-colors">$1</a>')
+                
+                // 8. Lists
                 .replace(/^\s*-\s+(.*)/gim, '<li class="ml-4 list-disc marker:text-indigo-400 mb-1">$1</li>')
                 .replace(/(<li.*<\/li>)/gim, '<ul class="my-4 pl-4">$1</ul>')
                 .replace(/<\/ul><ul class="my-4 pl-4">/g, '');
 
+            // 9. Paragraphs
             const parts = html.split(/\n\n/);
             html = parts.map(part => {
-                if (part.trim().match(/^<(h|ul|pre|blockquote)/)) return part;
+                if (part.trim().match(/^<(h|ul|pre|blockquote|div)/)) return part; // Added div to skip P wrapping for iframes
                 return `<p class="mb-4 leading-relaxed text-slate-600 dark:text-slate-300">${part}</p>`;
             }).join('\n');
 
@@ -186,26 +203,31 @@ We tried to load the markdown file for this article, but couldn't find it.
             const [darkMode, setDarkMode] = useState(false);
             const [searchQuery, setSearchQuery] = useState('');
             const [error, setError] = useState(false);
-            const [registryError, setRegistryError] = useState(false);
+            const [registryError, setRegistryError] = useState(null);
 
             // 1. Load Registry on Mount
             useEffect(() => {
                 const fetchRegistry = async () => {
                     try {
-                        const response = await fetch('./registry.json');
-                        if (!response.ok) throw new Error('Failed to load registry');
-                        const data = await response.json();
+                        const response = await fetch(`./registry.json?t=${new Date().getTime()}`);
+                        if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
                         
-                        if (Array.isArray(data) && data.length > 0) {
-                            setRegistry(data);
-                            setActiveArticle(data[0]);
-                            setRegistryLoaded(true);
-                        } else {
-                            throw new Error('Registry is empty');
+                        const text = await response.text();
+                        try {
+                            const data = JSON.parse(text);
+                            if (Array.isArray(data) && data.length > 0) {
+                                setRegistry(data);
+                                setActiveArticle(data[0]);
+                                setRegistryLoaded(true);
+                            } else {
+                                throw new Error('Registry is empty array');
+                            }
+                        } catch (e) {
+                            throw new Error(`JSON Syntax Error: ${e.message}`);
                         }
                     } catch (err) {
                         console.warn('Wiki: Could not load registry.json', err);
-                        setRegistryError(true);
+                        setRegistryError(err.message);
                         setRegistry(DEMO_REGISTRY);
                         setActiveArticle(DEMO_REGISTRY[0]);
                         setRegistryLoaded(true);
@@ -356,9 +378,9 @@ We tried to load the markdown file for this article, but couldn't find it.
                         <div className="flex-1 overflow-y-auto px-2 pb-6 custom-scrollbar">
                             {registryError && (
                                 <div className="px-4 mb-4">
-                                    <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 p-3 rounded text-xs border border-amber-200 dark:border-amber-800">
-                                        <strong>Setup Mode</strong><br/>
-                                        Could not load <code>registry.json</code>. Showing demo content.
+                                    <div className="bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 p-3 rounded text-xs border border-red-200 dark:border-red-800 break-words">
+                                        <strong>Configuration Error</strong><br/>
+                                        {registryError}
                                     </div>
                                 </div>
                             )}
@@ -406,7 +428,10 @@ We tried to load the markdown file for this article, but couldn't find it.
                                             <AlertCircle className="shrink-0 mt-1" />
                                             <div>
                                                 <h4 className="font-bold">Error Loading File</h4>
-                                                <p className="text-sm mt-1">Make sure the file exists and is pushed to GitHub.</p>
+                                                <p className="text-sm mt-1">
+                                                    Could not find: <code>{activeArticle?.path}</code>.<br/>
+                                                    Check that the file exists in the repo and the name matches exactly (case-sensitive).
+                                                </p>
                                             </div>
                                         </div>
                                     )}
