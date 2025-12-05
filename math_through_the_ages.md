@@ -3,4 +3,4 @@
 This is a file about mathematics history
 
 
-[[embed:dynamic/linear_equation.html]]
+[[embed:https://agwesth.github.io/wiki/dynamic/linear_equation.html]]
