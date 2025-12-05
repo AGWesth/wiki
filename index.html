@@ -41,6 +41,10 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
         .dark .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #334155; }
         
+        /* Hide scrollbar for embeds but allow scrolling */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
         /* Smooth transitions */
         body { transition: background-color 0.3s, color 0.3s; }
     </style>
@@ -55,7 +59,7 @@
         import { createRoot } from 'react-dom/client';
         import { 
             Book, Menu, X, Moon, Sun, Search, FileText, ChevronRight, 
-            AlertCircle, Github, PenTool, Loader, Link as LinkIcon 
+            AlertCircle, Github, PenTool, Loader, Link as LinkIcon, ExternalLink
         } from 'lucide-react';
 
         // --- FALLBACK / DEMO DATA ---
@@ -127,7 +131,20 @@ We tried to load the markdown file for this article, but couldn't find it.
                 .replace(/`([^`]+)`/gim, '<code class="bg-slate-100 dark:bg-slate-800 text-pink-600 dark:text-pink-400 px-1.5 py-0.5 rounded font-mono text-sm border border-slate-200 dark:border-slate-700">$1</code>')
                 
                 // 6. Embed Syntax: [[embed:path/to/file.html]]
-                .replace(/\[\[embed:(.*?)\]\]/g, '<div class="my-6 w-full h-[600px]"><iframe src="$1" class="w-full h-full border border-slate-200 dark:border-slate-700 rounded-lg bg-white" title="Embedded Content"></iframe></div>')
+                // Updated to include "no-scrollbar" class
+                .replace(/\[\[embed:(.*?)\]\]/g, `
+                    <div class="my-6">
+                        <div class="w-full h-[600px] border border-slate-200 dark:border-slate-700 rounded-t-lg bg-white overflow-hidden relative">
+                            <iframe src="$1" class="w-full h-full no-scrollbar" title="Embedded Content" style="border:0"></iframe>
+                        </div>
+                        <div class="bg-slate-100 dark:bg-slate-800 border-x border-b border-slate-200 dark:border-slate-700 rounded-b-lg px-4 py-2 flex justify-between items-center">
+                            <span class="text-xs text-slate-400 font-mono">$1</span>
+                            <a href="$1" target="_blank" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1">
+                                Open Source <span>↗</span>
+                            </a>
+                        </div>
+                    </div>
+                `)
 
                 // 7. Links
                 .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1">$1 <span class="text-[10px] opacity-70">↗</span></a>')
