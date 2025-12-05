@@ -2,6 +2,7 @@
 
 ![Cover](https://m.media-amazon.com/images/I/81ukWaZOOlL._SL1500_.jpg)
 
+
 Author: Andreas Westh
 
 Year: 2024
@@ -9,6 +10,7 @@ Year: 2024
 Rating: ⭐⭐⭐⭐⭐
 
 Status: Reading
+
 
 ## Summary
 A brief overview of what the book is about. This text will wrap nicely around the cover image on desktop screens, or sit below it on mobile devices.
