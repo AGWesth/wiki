@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AQL & RQL Explorer (OC Curve)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f8fafc; }
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #4f46e5;
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden flex flex-col lg:flex-row">
+        
+        <!-- Controls Panel -->
+        <div class="w-full lg:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">OC Curve Explorer</h1>
+                <p class="text-sm text-slate-500 mb-6">Operating Characteristic Curve.</p>
+
+                <!-- Stats Display -->
+                <div class="space-y-4 mb-8">
+                    <!-- AQL Display -->
+                    <div class="bg-emerald-50 border border-emerald-200 p-4 rounded-xl shadow-sm">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs font-bold text-emerald-600 uppercase">AQL (95% Accept)</span>
+                            <span id="disp-aql" class="text-xl font-mono font-bold text-emerald-700">--%</span>
+                        </div>
+                        <p id="expl-aql" class="text-xs text-emerald-700 mt-2 leading-tight">
+                            Calculating...
+                        </p>
+                    </div>
+
+                    <!-- RQL Display -->
+                    <div class="bg-rose-50 border border-rose-200 p-4 rounded-xl shadow-sm">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs font-bold text-rose-600 uppercase">RQL (5% Accept)</span>
+                            <span id="disp-rql" class="text-xl font-mono font-bold text-rose-700">--%</span>
+                        </div>
+                        <p id="expl-rql" class="text-xs text-rose-700 mt-2 leading-tight">
+                            Calculating...
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="space-y-6">
+                    <!-- Sample Size -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-bold text-slate-700 text-sm">Sample Size (n)</label>
+                            <span id="val-n" class="font-mono text-indigo-600 font-bold">50</span>
+                        </div>
+                        <input type="range" id="slider-n" min="1" max="500" step="1" value="50">
+                        <p class="text-[10px] text-slate-400 mt-1">More samples = Steeper curve (Better discrimination).</p>
+                    </div>
+
+                    <!-- Acceptance Number -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-bold text-slate-700 text-sm">Acceptance Number (c)</label>
+                            <span id="val-c" class="font-mono text-indigo-600 font-bold">2</span>
+                        </div>
+                        <input type="range" id="slider-c" min="0" max="20" step="1" value="2">
+                        <p class="text-[10px] text-slate-400 mt-1">Accept lot if defects &le; c.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Insight -->
+            <div class="mt-8 pt-6 border-t border-slate-200">
+                <p class="text-xs font-bold text-slate-400 uppercase mb-2">Logic</p>
+                <div class="text-sm text-slate-600">
+                    We use the <span class="font-bold text-indigo-600">Binomial Distribution</span>.
+                    <br>
+                    Plotting \( P(X \le c) \) for varying defect rates \( p \).
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart Panel -->
+        <div class="w-full lg:w-2/3 p-6 bg-white relative flex items-center justify-center">
+            <div class="w-full h-[500px]">
+                <canvas id="ocCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        Chart.register(window['chartjs-plugin-annotation']);
+
+        const ctx = document.getElementById('ocCanvas').getContext('2d');
+        const sN = document.getElementById('slider-n');
+        const sC = document.getElementById('slider-c');
+        const vN = document.getElementById('val-n');
+        const vC = document.getElementById('val-c');
+        const dispAQL = document.getElementById('disp-aql');
+        const dispRQL = document.getElementById('disp-rql');
+        
+        // New Text Elements
+        const explAQL = document.getElementById('expl-aql');
+        const explRQL = document.getElementById('expl-rql');
+
+        let chart;
+
+        // Math: Binomial CDF
+        // Probability of k successes in n trials with prob p
+        function binomialPMF(n, k, p) {
+            // Log-gamma approach for stability with large factorials
+            if (p === 0) return k === 0 ? 1 : 0;
+            if (p === 1) return k === n ? 1 : 0;
+            
+            // Standard calculation for reasonable n
+            if (n < 1000) {
+                let coeff = 1;
+                for (let x = n - k + 1; x <= n; x++) coeff *= x;
+                for (let x = 1; x <= k; x++) coeff /= x;
+                return coeff * Math.pow(p, k) * Math.pow(1 - p, n - k);
+            }
+            return 0; // Fallback (not needed for n=500 limit usually)
+        }
+
+        function binomialCDF(n, c, p) {
+            let sum = 0;
+            for (let k = 0; k <= c; k++) {
+                sum += binomialPMF(n, k, p);
+            }
+            return sum;
+        }
+
+        // Find p where Prob(Accept) approx targetY (binary search)
+        function findPercentile(n, c, targetProb) {
+            let low = 0;
+            let high = 1;
+            let mid = 0;
+            for(let i=0; i<50; i++) {
+                mid = (low + high) / 2;
+                const p = binomialCDF(n, c, mid);
+                if (p > targetProb) {
+                    low = mid; // Curve is decreasing, so if P is too high, we need higher defect rate to lower it
+                } else {
+                    high = mid;
+                }
+            }
+            return mid;
+        }
+
+        function update() {
+            const n = parseInt(sN.value);
+            const c = parseInt(sC.value);
+
+            // Constraint: c cannot be >= n
+            if (c >= n) {
+                sC.value = n - 1;
+                update();
+                return;
+            }
+
+            vN.textContent = n;
+            vC.textContent = c;
+
+            // Calculate AQL and RQL points
+            const aqlVal = findPercentile(n, c, 0.95);
+            const rqlVal = findPercentile(n, c, 0.05);
+            
+            const aqlPct = (aqlVal * 100).toFixed(2);
+            const rqlPct = (rqlVal * 100).toFixed(2);
+
+            dispAQL.textContent = aqlPct + "%";
+            dispRQL.textContent = rqlPct + "%";
+
+            // Update Explanatory Text
+            explAQL.innerHTML = `You are <b>95% sure</b> of accepting the lot if the actual defect rate is <b>${aqlPct}%</b>.`;
+            explRQL.innerHTML = `You are <b>95% sure</b> of rejecting the lot if the actual defect rate is <b>${rqlPct}%</b>.`;
+
+            drawChart(n, c, aqlVal, rqlVal);
+        }
+
+        function drawChart(n, c, aqlVal, rqlVal) {
+            // Determine X Axis range. 
+            // We want to show a bit past the RQL to see the tail.
+            const maxX = Math.min(1, rqlVal * 1.5); 
+            
+            const labels = [];
+            const dataPoints = [];
+            const steps = 100;
+
+            for (let i = 0; i <= steps; i++) {
+                const p = (i / steps) * maxX;
+                const probAccept = binomialCDF(n, c, p);
+                labels.push((p * 100).toFixed(1));
+                dataPoints.push({x: p * 100, y: probAccept});
+            }
+
+            if (!chart) {
+                chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels, // Dummy labels
+                        datasets: [{
+                            label: 'Probability of Acceptance',
+                            data: dataPoints,
+                            borderColor: '#4f46e5', // Indigo
+                            borderWidth: 3,
+                            pointRadius: 0,
+                            fill: false,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 0 },
+                        layout: { padding: { top: 20, right: 20 } },
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                title: { display: true, text: 'Defect Rate in Lot (%)' },
+                                ticks: { callback: (v) => v.toFixed(1) + '%' }
+                            },
+                            y: {
+                                min: 0,
+                                max: 1,
+                                title: { display: true, text: 'Probability of Acceptance' },
+                                ticks: { callback: (v) => (v*100).toFixed(0) + '%' }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            annotation: {
+                                annotations: {
+                                    line95: {
+                                        type: 'line',
+                                        yMin: 0.95,
+                                        yMax: 0.95,
+                                        borderColor: '#10b981', // Emerald
+                                        borderWidth: 2,
+                                        borderDash: [5, 5],
+                                        label: {
+                                            display: true,
+                                            content: 'AQL (95%)',
+                                            backgroundColor: '#10b981',
+                                            color: 'white',
+                                            position: 'end',
+                                            yAdjust: -10
+                                        }
+                                    },
+                                    line05: {
+                                        type: 'line',
+                                        yMin: 0.05,
+                                        yMax: 0.05,
+                                        borderColor: '#e11d48', // Rose
+                                        borderWidth: 2,
+                                        borderDash: [5, 5],
+                                        label: {
+                                            display: true,
+                                            content: 'RQL (5%)',
+                                            backgroundColor: '#e11d48',
+                                            color: 'white',
+                                            position: 'end',
+                                            yAdjust: 10
+                                        }
+                                    },
+                                    boxAQL: {
+                                        type: 'box',
+                                        xMin: 0,
+                                        xMax: (ctx) => aqlVal * 100, // Dynamic
+                                        yMin: 0,
+                                        yMax: 1,
+                                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                        borderWidth: 0
+                                    },
+                                    boxRQL: {
+                                        type: 'box',
+                                        xMin: (ctx) => rqlVal * 100, // Dynamic
+                                        xMax: (ctx) => maxX * 100, // To end of chart
+                                        yMin: 0,
+                                        yMax: 1,
+                                        backgroundColor: 'rgba(225, 29, 72, 0.1)',
+                                        borderWidth: 0
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    title: (ctx) => `Defect Rate: ${ctx[0].parsed.x.toFixed(2)}%`,
+                                    label: (ctx) => `Acceptance Prob: ${(ctx.parsed.y * 100).toFixed(1)}%`
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                chart.data.datasets[0].data = dataPoints;
+                
+                // Update Scale
+                chart.options.scales.x.max = maxX * 100;
+                
+                // Update Dynamic Annotations manually (if using functions in options, chart.update() handles it, 
+                // but explicit values are safer for direct manipulation)
+                chart.options.plugins.annotation.annotations.boxAQL.xMax = aqlVal * 100;
+                chart.options.plugins.annotation.annotations.boxRQL.xMin = rqlVal * 100;
+                chart.options.plugins.annotation.annotations.boxRQL.xMax = maxX * 100;
+
+                chart.update();
+            }
+        }
+
+        sN.addEventListener('input', update);
+        sC.addEventListener('input', update);
+
+        // Init
+        update();
+
+    </script>
+</body>
+</html>

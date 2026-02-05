@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gauss Summation Visualization</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+        canvas {
+            touch-action: none;
+        }
+        input[type=range] {
+            -webkit-appearance: none; 
+            width: 100%; 
+            background: transparent; 
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden flex flex-col md:flex-row border border-slate-200">
+        
+        <!-- Controls Panel -->
+        <div class="w-full md:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Gauss Summation</h1>
+                <p class="text-sm text-slate-500 mb-6">Visualizing \( 1 + 2 + \dots + n \)</p>
+
+                <!-- Value Control -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6">
+                    <div class="flex justify-between mb-2">
+                        <label class="text-sm font-bold text-slate-700">Number of Terms (n)</label>
+                        <span id="val-n" class="text-lg font-mono text-blue-600 font-bold">10</span>
+                    </div>
+                    <input type="range" id="slider-n" min="1" max="50" value="10" step="1">
+                </div>
+
+                <!-- Toggles -->
+                <div class="space-y-3 mb-8">
+                    <label class="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-slate-100 transition">
+                        <input type="checkbox" id="check-line" class="w-5 h-5 text-blue-600 rounded" checked>
+                        <span class="text-slate-700 text-sm font-semibold">Show Diagonal Cut</span>
+                    </label>
+                    
+                    <label class="flex items-center space-x-3 cursor-pointer p-3 rounded-lg hover:bg-slate-100 transition">
+                        <input type="checkbox" id="check-rect" class="w-5 h-5 text-indigo-600 rounded">
+                        <div class="flex flex-col">
+                            <span class="text-slate-700 text-sm font-semibold">Show Gaussian Rectangle</span>
+                            <span class="text-[10px] text-slate-400">The "Pairing" Method (n × n+1)</span>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Math Derivation -->
+                <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                    <p class="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2">Triangle Area Logic</p>
+                    <div id="math-display" class="space-y-2 text-sm text-slate-700 font-mono">
+                        <!-- Content updated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="mt-6 pt-4 border-t border-slate-200">
+                <p class="text-xs text-slate-400 leading-relaxed">
+                    <span class="font-bold text-emerald-600">Insight:</span> The smooth line \(y=x\) cuts the diagonal boxes in half. To get the full integer sum, we take the smooth triangle area and <span class="font-bold text-rose-500">add back</span> the missing halves.
+                </p>
+            </div>
+        </div>
+
+        <!-- Canvas Panel -->
+        <div class="w-full md:w-2/3 p-4 bg-white relative flex items-center justify-center bg-grid-slate-100 overflow-hidden">
+            <canvas id="gaussCanvas" class="rounded-lg shadow-inner bg-slate-50 border border-slate-200"></canvas>
+            
+            <!-- Floating Label -->
+            <div id="result-label" class="absolute top-6 right-6 bg-white/90 p-2 rounded-lg border border-slate-200 shadow text-xl font-bold text-slate-800">
+                Sum = 55
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const canvas = document.getElementById('gaussCanvas');
+        const ctx = canvas.getContext('2d');
+        const slider = document.getElementById('slider-n');
+        const valN = document.getElementById('val-n');
+        const checkLine = document.getElementById('check-line');
+        const checkRect = document.getElementById('check-rect');
+        const mathDisplay = document.getElementById('math-display');
+        const resLabel = document.getElementById('result-label');
+
+        let n = 10;
+        let showLine = true;
+        let showRect = false;
+
+        // Colors
+        const colBar = '#3b82f6'; // Blue-500
+        const colBarTop = '#60a5fa'; // Blue-400
+        const colMiss = '#f43f5e'; // Rose-500
+        const colRect = '#cbd5e1'; // Slate-300 (Ghost bars)
+        const colLine = '#fbbf24'; // Amber-400
+
+        function resize() {
+            // Make canvas responsive but square-ish ratio logic
+            const container = canvas.parentElement;
+            const size = Math.min(container.clientWidth, container.clientHeight) * 0.95;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+        window.addEventListener('resize', () => { resize(); render(); });
+        resize();
+
+        function drawGrid(size, cellSize, offsetX, offsetY) {
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            // Vert
+            for(let i=0; i<=n+1; i++) {
+                ctx.moveTo(offsetX + i*cellSize, offsetY);
+                ctx.lineTo(offsetX + i*cellSize, offsetY - (n+1)*cellSize);
+            }
+            // Horiz
+            for(let i=0; i<=n+1; i++) {
+                ctx.moveTo(offsetX, offsetY - i*cellSize);
+                ctx.lineTo(offsetX + (n+1)*cellSize, offsetY - i*cellSize);
+            }
+            ctx.stroke();
+        }
+
+        function render() {
+            const w = canvas.width;
+            const h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+
+            // Calculate Scale
+            // We need to fit n (width) and n (height)
+            // Or n+1 width for rect view
+            const maxUnits = showRect ? n + 2 : n + 1; 
+            const margin = 40;
+            const availableW = w - 2*margin;
+            const availableH = h - 2*margin;
+            const cellSize = Math.min(availableW / maxUnits, availableH / maxUnits);
+            
+            const originX = margin;
+            const originY = h - margin;
+
+            // Draw Background Grid (Optional, keep faint)
+            // drawGrid(n, cellSize, originX, originY);
+
+            // Draw Staircase (1 to n)
+            for (let i = 1; i <= n; i++) {
+                const x = originX + (i-1) * cellSize;
+                const height = i * cellSize;
+                const y = originY - height;
+
+                // Base Bar
+                ctx.fillStyle = colBar;
+                ctx.fillRect(x, y, cellSize, height);
+                
+                // Border
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x, y, cellSize, height);
+
+                // Highlight the Top Box specifically if Line is active
+                if (showLine) {
+                    // The top box is from y to y+cellSize
+                    // Draw the "Lower" triangle of the top box in blue (already filled)
+                    // We will draw the "Missing" upper triangle later on top
+                }
+            }
+
+            // Draw Gaussian Rectangle (Ghost Bars)
+            if (showRect) {
+                ctx.fillStyle = 'rgba(99, 102, 241, 0.2)'; // Indigo-500 transparent
+                ctx.strokeStyle = 'rgba(99, 102, 241, 0.4)';
+                
+                // The rectangle method pairs col 1 with col n, col 2 with n-1
+                // Visually this looks like an inverted staircase on top
+                // Creating a n * (n+1) rectangle.
+                // Wait, standard visual is usually width n, height n+1
+                // Col 1 (height 1) gets height n on top -> total n+1
+                
+                for(let i = 1; i <= n; i++) {
+                    const x = originX + (i-1) * cellSize;
+                    // Existing height is i * cellSize
+                    // We add (n + 1 - i) * cellSize on top
+                    const existingH = i * cellSize;
+                    const addH = (n + 1 - i) * cellSize;
+                    const y = originY - existingH - addH;
+                    
+                    ctx.fillRect(x, y, cellSize, addH);
+                    ctx.strokeRect(x, y, cellSize, addH);
+                }
+                
+                // Outline entire rectangle
+                ctx.strokeStyle = '#4f46e5';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(originX, originY - (n+1)*cellSize, n*cellSize, (n+1)*cellSize);
+                
+                // Label
+                ctx.fillStyle = '#4f46e5';
+                ctx.font = 'bold 14px sans-serif';
+                ctx.fillText(`Area = n(n+1)`, originX + n*cellSize/2 - 40, originY - (n+1)*cellSize - 10);
+            }
+
+            // Draw Diagonal Line (y = x)
+            if (showLine && !showRect) { // Hide line in rect mode to reduce clutter
+                const lineEndX = originX + n * cellSize;
+                const lineEndY = originY - n * cellSize;
+
+                // Fill the "Missing" Upper Halves
+                ctx.fillStyle = colMiss;
+                for (let i = 1; i <= n; i++) {
+                    // Top box of col i coordinates
+                    const bx = originX + (i-1) * cellSize;
+                    const by = originY - i * cellSize; // Top-left corner of the box
+                    
+                    // Triangle: Top-Left, Top-Right, Bottom-Right?
+                    // Line goes from (0,0) to (n,n).
+                    // In box i (x from i-1 to i, y from i-1 to i in grid units)
+                    // The line passes through (i-1, i-1) to (i, i).
+                    // This is bottom-left to top-right of the box relative to the box itself.
+                    // So the "Missing" part (above line) is Top-Left triangle.
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(bx, by); // Top Left
+                    ctx.lineTo(bx + cellSize, by); // Top Right
+                    ctx.lineTo(bx, by + cellSize); // Bottom Left (Wait, diagonal is BL to TR)
+                    
+                    // Box Top-Left is (bx, by)
+                    // Box Bottom-Right is (bx+cell, by+cell)
+                    // Diagonal goes BL to TR.
+                    // Triangle above diagonal is defined by: Top-Left, Top-Right, Bottom-Left? No.
+                    // Vertices: Top-Left (bx, by), Top-Right (bx+cell, by), Bottom-Left(No)...
+                    // Diagonal Points: (bx, by+cell) to (bx+cell, by)
+                    
+                    // Let's trace carefully.
+                    // Canvas Y is inverted. originY is bottom.
+                    // Box i: X range [i-1, i]. Y range [i-1, i] (logic).
+                    // In canvas pixels: 
+                    // Left X: originX + (i-1)cell
+                    // Right X: originX + i*cell
+                    // Bottom Y: originY - (i-1)cell
+                    // Top Y: originY - i*cell
+                    
+                    // Line goes from (Left X, Bottom Y) to (Right X, Top Y).
+                    // This creates a diagonal from Bottom-Left to Top-Right of the box.
+                    // The area ABOVE the line (missing from triangle integral) is the Top-Left triangle.
+                    // Vertices: Top-Left, Top-Right, Bottom-Left.
+                    // Wait, BL to TR diagonal splits square into TL triangle and BR triangle.
+                    // Yes. Top-Left triangle is the one above the line.
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(bx, by); // Top-Left visual
+                    ctx.lineTo(bx + cellSize, by); // Top-Right visual
+                    ctx.lineTo(bx, by + cellSize); // Bottom-Left visual? No, bottom left is on the line.
+                    // Diagonal is (bx, by+cell) -> (bx+cell, by) NO.
+                    // Bottom-Left of box is (bx, by+cell). Top-Right is (bx+cell, by).
+                    // Line connects these two? Yes.
+                    
+                    // Canvas Coords:
+                    // Top-Left of box: (bx, by)
+                    // Top-Right: (bx+w, by)
+                    // Bottom-Left: (bx, by+h)
+                    // Bottom-Right: (bx+w, by+h)
+                    // Line connects Bottom-Left (bx, by+h) to Top-Right (bx+w, by).
+                    
+                    // So Missing Triangle is the Top-Left one.
+                    // Vertices: (bx, by+h) -> (bx, by) -> (bx+w, by).
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(bx, by + cellSize); // Bottom-Left
+                    ctx.lineTo(bx, by);            // Top-Left
+                    ctx.lineTo(bx + cellSize, by); // Top-Right
+                    ctx.closePath();
+                    ctx.fill();
+                }
+
+                // Draw The Line
+                ctx.strokeStyle = colLine;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(originX, originY);
+                ctx.lineTo(lineEndX, lineEndY);
+                ctx.stroke();
+
+                // Label Areas
+                ctx.fillStyle = colLine;
+                ctx.font = 'bold 16px sans-serif';
+                ctx.fillText("Area ≈ n²/2", originX + n*cellSize*0.6, originY - n*cellSize*0.2);
+            }
+        }
+
+        function updateMath() {
+            const sum = (n * (n + 1)) / 2;
+            const n2_2 = (n*n)/2;
+            const n_2 = n/2;
+
+            if (showRect) {
+                mathDisplay.innerHTML = `
+                    \\[ \\text{2} \\times \\text{Sum} = n(n+1) \\]
+                    \\[ \\text{Sum} = \\frac{${n}(${n+1})}{2} = \\mathbf{${sum}} \\]
+                `;
+                resLabel.style.color = '#4f46e5';
+            } else {
+                // User's Triangle Logic
+                mathDisplay.innerHTML = `
+                    \\[ \\text{Triangle Area} = \\frac{1}{2} n^2 = \\frac{${n}^2}{2} = ${n2_2} \\]
+                    \\[ \\text{Missing Tips} = \\color{#f43f5e}{+ \\frac{n}{2}} \\color{black} = +${n_2} \\]
+                    \\[ \\text{Total} = ${n2_2} + ${n_2} = \\mathbf{${sum}} \\]
+                `;
+                resLabel.style.color = '#0f172a';
+            }
+            
+            resLabel.textContent = `Sum = ${sum}`;
+            if(window.MathJax) MathJax.typesetPromise([mathDisplay]);
+        }
+
+        function update() {
+            n = parseInt(slider.value);
+            valN.textContent = n;
+            showLine = checkLine.checked;
+            showRect = checkRect.checked;
+            
+            // Exclusive toggles for clarity
+            if(showRect) {
+                checkLine.disabled = true;
+                checkLine.parentElement.style.opacity = 0.5;
+            } else {
+                checkLine.disabled = false;
+                checkLine.parentElement.style.opacity = 1;
+            }
+
+            render();
+            updateMath();
+        }
+
+        slider.addEventListener('input', update);
+        checkLine.addEventListener('change', update);
+        checkRect.addEventListener('change', update);
+
+        // Init
+        update();
+
+    })();
+    </script>
+</body>
+</html>

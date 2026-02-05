@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Newton's First Law Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f8fafc; }
+        canvas { touch-action: none; }
+        /* Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #6366f1;
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden flex flex-col lg:flex-row">
+        
+        <!-- Controls Panel -->
+        <div class="w-full lg:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Newton's First Law</h1>
+                <p class="text-sm text-slate-500 mb-6">The Law of Inertia.</p>
+
+                <!-- Status Card -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold text-slate-400 uppercase">Velocity</span>
+                        <span id="val-vel" class="text-xl font-mono font-bold text-indigo-600">0.00 m/s</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2">
+                        <div id="bar-vel" class="bg-indigo-500 h-2 rounded-full transition-all duration-75" style="width: 0%"></div>
+                    </div>
+                    <p id="status-text" class="text-xs text-slate-400 mt-2 italic">Object is at rest.</p>
+                </div>
+
+                <!-- Controls -->
+                <div class="space-y-6">
+                    <!-- Friction Slider -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-bold text-slate-700 text-sm">Friction / Resistance</label>
+                            <span id="val-friction" class="font-mono text-slate-600 font-bold">0.00</span>
+                        </div>
+                        <input type="range" id="slider-friction" min="0" max="0.1" step="0.001" value="0.0">
+                        <div class="flex justify-between text-[10px] text-slate-400 mt-1">
+                            <span>Space (None)</span>
+                            <span>Ice</span>
+                            <span>Sand</span>
+                        </div>
+                    </div>
+
+                    <!-- Push Button -->
+                    <button id="btn-push" class="w-full py-4 rounded-xl bg-slate-800 text-white font-bold hover:bg-slate-700 transition shadow-lg flex items-center justify-center space-x-2 active:scale-95 transform duration-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        <span>Apply Force (Push)</span>
+                    </button>
+                    
+                    <button id="btn-reset" class="w-full py-2 rounded-lg border-2 border-slate-200 text-slate-600 font-bold hover:bg-slate-100 transition text-sm">
+                        Stop / Reset
+                    </button>
+                </div>
+            </div>
+
+            <!-- Teaching Note -->
+            <div class="mt-8 pt-6 border-t border-slate-200">
+                <p class="text-xs font-bold text-slate-400 uppercase mb-2">Concept</p>
+                <p class="text-sm text-slate-600 leading-relaxed italic">
+                    "An object at rest stays at rest and an object in motion stays in motion... <span class="font-bold text-indigo-600">unless acted upon by an unbalanced force.</span>"
+                </p>
+                <p class="text-xs text-slate-500 mt-2">
+                    Set friction to 0. Give it a push. Watch it go forever.
+                </p>
+            </div>
+        </div>
+
+        <!-- Canvas Panel -->
+        <div class="w-full lg:w-2/3 p-0 relative bg-slate-900 flex items-center justify-center overflow-hidden">
+            <canvas id="simCanvas" class="w-full h-full block"></canvas>
+            
+            <!-- Force Indicator Overlay -->
+            <div id="force-indicator" class="absolute pointer-events-none opacity-0 transition-opacity duration-200">
+                <div class="flex items-center text-white font-bold text-lg">
+                    <svg class="w-12 h-12 text-yellow-400 animate-pulse mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                    </svg>
+                    FORCE!
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // UI
+        const btnPush = document.getElementById('btn-push');
+        const btnReset = document.getElementById('btn-reset');
+        const sFriction = document.getElementById('slider-friction');
+        const vFriction = document.getElementById('val-friction');
+        const vVel = document.getElementById('val-vel');
+        const barVel = document.getElementById('bar-vel');
+        const statusText = document.getElementById('status-text');
+        const forceInd = document.getElementById('force-indicator');
+
+        // Physics State
+        let pos = { x: 100, y: 0 }; // y set in resize
+        let vel = 0;
+        let friction = 0;
+        const mass = 10;
+        const pushForce = 5;
+        
+        // Animation
+        let lastTime = 0;
+        let objectRadius = 40;
+
+        function resize() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight || 500;
+            pos.y = canvas.height / 2;
+            if(pos.x > canvas.width + objectRadius) pos.x = -objectRadius;
+        }
+        window.addEventListener('resize', resize);
+
+        function update(dt) {
+            // Apply Friction
+            // Damping model:
+            // If friction slider is 0, damping is 1 (no loss).
+            const damping = 1 - sFriction.value;
+            
+            vel *= damping;
+
+            // Stop if very slow
+            if (Math.abs(vel) < 0.01) vel = 0;
+
+            // Update Position
+            pos.x += vel;
+
+            // Wrap around screen for infinite loop feel
+            if (pos.x > canvas.width + objectRadius) {
+                pos.x = -objectRadius;
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Draw Background Grid/Stars
+            // If friction is low, look like space. If high, look like a surface.
+            const fVal = parseFloat(sFriction.value);
+            if (fVal < 0.01) {
+                drawStars();
+            } else {
+                drawGrid();
+            }
+
+            // 2. Draw Object (Puck/Ship)
+            ctx.save();
+            ctx.translate(pos.x, pos.y);
+            
+            // Body
+            ctx.beginPath();
+            ctx.arc(0, 0, objectRadius, 0, Math.PI * 2);
+            ctx.fillStyle = '#6366f1'; // Indigo-500
+            ctx.shadowColor = 'rgba(99, 102, 241, 0.5)';
+            ctx.shadowBlur = 20;
+            ctx.fill();
+            
+            // Detail (Rim)
+            ctx.strokeStyle = '#a5b4fc';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+
+            // Velocity Vector Visual
+            if (Math.abs(vel) > 0.1) {
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(vel * 10, 0); // Scale vector
+                ctx.strokeStyle = '#fbbf24'; // Amber
+                ctx.lineWidth = 4;
+                ctx.stroke();
+                
+                // Arrowhead
+                ctx.beginPath();
+                const headX = vel * 10;
+                ctx.moveTo(headX, 0);
+                ctx.lineTo(headX - 10, -5);
+                ctx.lineTo(headX - 10, 5);
+                ctx.fillStyle = '#fbbf24';
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        function drawStars() {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            for(let i=0; i<20; i++) {
+                // Pseudo-random based on index
+                const x = (i * 137) % canvas.width;
+                const y = (i * 263) % canvas.height;
+                ctx.beginPath();
+                ctx.arc(x, y, 2, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.lineWidth = 2;
+            const floorY = pos.y + objectRadius + 10;
+            
+            // Horizon line
+            ctx.beginPath();
+            ctx.moveTo(0, floorY);
+            ctx.lineTo(canvas.width, floorY);
+            ctx.stroke();
+
+            // Ticks
+            for (let x = 0; x < canvas.width; x += 100) {
+                ctx.beginPath();
+                ctx.moveTo(x, floorY);
+                ctx.lineTo(x - 20, canvas.height);
+                ctx.stroke();
+            }
+        }
+
+        function loop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const dt = (timestamp - lastTime) / 16; // Normalize to ~60fps units
+            lastTime = timestamp;
+
+            update(dt);
+            draw();
+            updateUI();
+
+            requestAnimationFrame(loop);
+        }
+
+        function updateUI() {
+            // Velocity
+            const v = Math.abs(vel).toFixed(2);
+            vVel.textContent = v + " units";
+            barVel.style.width = Math.min(100, (Math.abs(vel) / 20) * 100) + "%";
+            
+            // Friction Label
+            const f = parseFloat(sFriction.value);
+            vFriction.textContent = f.toFixed(3);
+
+            // Status Text
+            if (vel === 0) statusText.textContent = "Object is at rest (Inertia).";
+            else if (f === 0) statusText.textContent = "Moving forever (Inertia in motion).";
+            else statusText.textContent = "Slowing down due to external force (Friction).";
+        }
+
+        // Actions
+        btnPush.addEventListener('click', () => {
+            vel += pushForce;
+            
+            // Visual Flare
+            forceInd.style.opacity = 1;
+            forceInd.style.left = (pos.x - 50) + "px"; // Simple positioning
+            forceInd.style.top = (pos.y - 80) + "px";
+            
+            setTimeout(() => {
+                forceInd.style.opacity = 0;
+            }, 500);
+        });
+
+        btnReset.addEventListener('click', () => {
+            vel = 0;
+            pos.x = 100;
+        });
+
+        // Init
+        resize();
+        requestAnimationFrame(loop);
+
+    })();
+    </script>
+</body>
+</html>

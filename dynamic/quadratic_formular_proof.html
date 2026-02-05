@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Proof: Completing the Square</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script>
+        window.MathJax = {
+            loader: {load: ['[tex]/color']},
+            tex: {packages: {'[+]': ['color']}},
+            startup: {
+                pageReady: () => {
+                    return MathJax.startup.defaultPageReady();
+                }
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+        canvas {
+            touch-action: none;
+        }
+        /* Smooth slider styling */
+        input[type=range] {
+            -webkit-appearance: none; 
+            width: 100%; 
+            background: transparent; 
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #059669; /* Emerald-600 */
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+        .math-step {
+            transition: all 0.5s ease;
+            opacity: 0.5;
+            transform: scale(0.95);
+            border-left: 4px solid transparent;
+        }
+        .math-active {
+            opacity: 1;
+            transform: scale(1);
+            background-color: #ecfdf5; /* emerald-50 */
+            border-left: 4px solid #059669;
+            padding-left: 1rem;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden flex flex-col md:flex-row">
+        
+        <!-- Controls Panel -->
+        <div class="w-full md:w-2/5 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Completing the Square</h1>
+                <p class="text-sm text-slate-500 mb-6">Geometric Proof of Quadratic Formula.</p>
+
+                <!-- Slider Control -->
+                <div class="mb-8 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex justify-between mb-2">
+                        <label class="text-sm font-bold text-slate-700">Animation Progress</label>
+                        <span id="pct-display" class="text-xs font-mono text-emerald-600">0%</span>
+                    </div>
+                    <input type="range" id="anim-slider" min="0" max="100" value="0" step="0.5">
+                    
+                    <div class="flex space-x-2 mt-4">
+                        <button id="btn-animate" class="flex-1 py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition shadow-md text-sm">
+                            Play
+                        </button>
+                        <button id="btn-reset" class="px-4 py-2 rounded-lg bg-slate-200 text-slate-600 font-bold hover:bg-slate-300 transition shadow-sm text-sm">
+                            Reset
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Algebraic Logic Container -->
+                <div class="space-y-4">
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Derivation Steps</p>
+
+                    <!-- Step 1: Start -->
+                    <div id="step-1" class="math-step p-2 rounded">
+                        <p class="text-xs text-slate-500 mb-1">1. Start with x² + bx</p>
+                        <div class="text-sm font-mono text-slate-800">
+                            \[ x^2 + bx = C \]
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Cut -->
+                    <div id="step-2" class="math-step p-2 rounded">
+                        <p class="text-xs text-slate-500 mb-1">2. Cut bx in half</p>
+                        <div class="text-sm font-mono text-slate-800">
+                            \[ x^2 + \frac{b}{2}x + \frac{b}{2}x = C \]
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Paste/Rearrange -->
+                    <div id="step-3" class="math-step p-2 rounded">
+                        <p class="text-xs text-slate-500 mb-1">3. Move to form "L" shape</p>
+                        <div class="text-sm font-mono text-slate-800">
+                            (Rearranging Geometry)
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Complete Square -->
+                    <div id="step-4" class="math-step p-2 rounded">
+                        <p class="text-xs text-slate-500 mb-1">4. Add missing corner</p>
+                        <div class="text-sm font-mono text-slate-800">
+                            \[ x^2 + bx + \color{red}(\frac{b}{2})^2 \color{black} = C + \color{red}(\frac{b}{2})^2 \]
+                        </div>
+                    </div>
+
+                     <!-- Step 5: Solve -->
+                     <div id="step-5" class="math-step p-2 rounded bg-indigo-50 border-indigo-100">
+                        <p class="text-xs text-indigo-600 font-bold mb-1">5. Factor and Solve</p>
+                        <div class="text-sm font-mono text-indigo-800">
+                            \[ (x + \frac{b}{2})^2 = C + (\frac{b}{2})^2 \]
+                            \[ x = -\frac{b}{2} \pm \sqrt{C + (\frac{b}{2})^2} \]
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Canvas Panel -->
+        <div class="w-full md:w-3/5 p-4 bg-white relative flex items-center justify-center bg-grid-slate-100">
+            <canvas id="quadCanvas" width="600" height="600" class="w-full h-auto max-w-[500px] rounded-lg shadow-inner bg-slate-50 border border-slate-200"></canvas>
+            
+            <!-- Floating Label Area -->
+            <div id="float-label" class="absolute top-6 right-6 bg-white/90 p-2 rounded border border-slate-200 text-xs font-mono text-slate-500 shadow-sm opacity-0 transition-opacity">
+                Area = x² + bx
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const canvas = document.getElementById('quadCanvas');
+        const ctx = canvas.getContext('2d');
+        const slider = document.getElementById('anim-slider');
+        const pctDisplay = document.getElementById('pct-display');
+        const btnAnimate = document.getElementById('btn-animate');
+        const btnReset = document.getElementById('btn-reset');
+        const floatLabel = document.getElementById('float-label');
+
+        const steps = [
+            document.getElementById('step-1'),
+            document.getElementById('step-2'),
+            document.getElementById('step-3'),
+            document.getElementById('step-4'),
+            document.getElementById('step-5')
+        ];
+
+        // Geometry Config
+        // Logical Units: x = 200, b = 120
+        const xLen = 200;
+        const bLen = 120;
+        const padding = 100;
+        const scale = 1.0; 
+        
+        // Colors
+        const colX2 = '#4f46e5'; // Indigo-600
+        const colBX = '#059669'; // Emerald-600
+        const colMissing = '#e11d48'; // Rose-600
+
+        // Animation State
+        let progress = 0; 
+        let isPlaying = false;
+
+        function easeInOut(t) { return t < .5 ? 2 * t * t : -1 + (4 - 2 * t) * t; }
+
+        function drawRect(x, y, w, h, color, label) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, w, h);
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, h);
+            
+            if (label && w > 30 && h > 20) {
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 16px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(label, x + w/2, y + h/2);
+            }
+        }
+
+        function drawDim(x1, y1, x2, y2, text, offset=15) {
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            
+            // Perpendicular offsets
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            const len = Math.sqrt(dx*dx + dy*dy);
+            const nx = -dy/len * offset;
+            const ny = dx/len * offset;
+
+            // Main Line
+            ctx.moveTo(x1 + nx, y1 + ny);
+            ctx.lineTo(x2 + nx, y2 + ny);
+            
+            // Ticks
+            ctx.moveTo(x1 + nx - dx/len*3, y1 + ny - dy/len*3);
+            ctx.lineTo(x1 + nx + dx/len*3, y1 + ny + dy/len*3);
+            ctx.moveTo(x2 + nx - dx/len*3, y2 + ny - dy/len*3);
+            ctx.lineTo(x2 + nx + dx/len*3, y2 + ny + dy/len*3);
+            
+            ctx.stroke();
+
+            // Text
+            ctx.fillStyle = '#475569';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, (x1+x2)/2 + nx*1.8, (y1+y2)/2 + ny*1.8);
+        }
+
+        function updateSteps(p) {
+            steps.forEach(s => s.classList.remove('math-active'));
+            // Adjusted timing for the initial "cut" phase
+            if (p < 10) steps[0].classList.add('math-active'); // Start
+            else if (p < 40) steps[1].classList.add('math-active'); // Cut & Separate
+            else if (p < 80) steps[2].classList.add('math-active'); // Move
+            else if (p < 95) steps[3].classList.add('math-active'); // Complete
+            else steps[4].classList.add('math-active'); // Solve
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Centering logic
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            
+            const startX = cx - (xLen + bLen)/2;
+            const startY = cy - xLen/2;
+
+            // Draw x^2 Square (Always present)
+            drawRect(startX, startY, xLen, xLen, colX2, "x²");
+
+            // --- Handle bx term(s) ---
+            const bHalf = bLen / 2;
+            let splitGap = 0;
+
+            // Phase 2: Separation gap (20% - 40%)
+            if (progress > 20) {
+                const t = Math.min(1, (progress - 20) / 20); 
+                splitGap = easeInOut(t) * 10; 
+            }
+
+            if (progress < 10) {
+                // *** PHASE 0 (0-10%): Single solid bx rectangle ***
+                const bxX = startX + xLen;
+                const bxY = startY;
+                drawRect(bxX, bxY, bLen, xLen, colBX, "bx");
+            } else {
+                // *** PHASE 1+ (10%+): Cut into two strips ***
+
+                // Strip 1 (Stays on right)
+                const strip1X = startX + xLen;
+                const strip1Y = startY;
+                drawRect(strip1X, strip1Y, bHalf, xLen, colBX, "");
+                ctx.fillStyle = 'white'; ctx.textAlign = 'center'; 
+                ctx.font = '12px sans-serif';
+                ctx.fillText("bx/2", strip1X + bHalf/2, strip1Y + xLen/2);
+
+
+                // Strip 2 (The one that moves)
+                let strip2X = startX + xLen + bHalf + splitGap;
+                let strip2Y = startY;
+                let strip2W = bHalf;
+                let strip2H = xLen;
+                
+                // --- Phase 3: Move/Rotate Strip 2 (40% - 80%) ---
+                if (progress > 40) {
+                    const t = Math.min(1, (progress - 40) / 40);
+                    const ease = easeInOut(t);
+                    
+                    // Start Center:
+                    const scx = startX + xLen + bHalf + splitGap + bHalf/2;
+                    const scy = startY + xLen/2;
+                    
+                    // End Center (Bottom of x^2):
+                    const ecx = startX + xLen/2;
+                    const ecy = startY + xLen + bHalf/2;
+                    
+                    const curCx = scx + (ecx - scx) * ease;
+                    const curCy = scy + (ecy - scy) * ease;
+                    
+                    // Interpolate Dimensions (Simulates rotation)
+                    strip2W = bHalf + (xLen - bHalf) * ease;
+                    strip2H = xLen + (bHalf - xLen) * ease;
+                    
+                    strip2X = curCx - strip2W/2;
+                    strip2Y = curCy - strip2H/2;
+                }
+
+                drawRect(strip2X, strip2Y, strip2W, strip2H, colBX, "");
+                ctx.fillText("bx/2", strip2X + strip2W/2, strip2Y + strip2H/2);
+            }
+
+
+            // --- Phase 4: Show Missing Square (80% - 100%) ---
+            if (progress > 80) {
+                const t = Math.min(1, (progress - 80) / 20);
+                
+                const missingX = startX + xLen;
+                const missingY = startY + xLen;
+                const missingSize = bHalf;
+
+                ctx.globalAlpha = t;
+                ctx.fillStyle = colMissing;
+                ctx.fillRect(missingX, missingY, missingSize, missingSize);
+                ctx.strokeStyle = '#e11d48'; // dark border
+                ctx.setLineDash([5, 5]);
+                ctx.lineWidth = 2;
+                ctx.strokeRect(missingX, missingY, missingSize, missingSize);
+                ctx.setLineDash([]);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.fillText("(b/2)²", missingX + missingSize/2, missingY + missingSize/2);
+                ctx.globalAlpha = 1;
+            }
+
+            // --- Dimensions ---
+            if (progress < 10) {
+                // Initial state: x and full b
+                drawDim(startX, startY - 10, startX + xLen, startY - 10, "x");
+                drawDim(startX + xLen, startY - 10, startX + xLen + bLen, startY - 10, "b");
+                drawDim(startX - 10, startY, startX - 10, startY + xLen, "x");
+            } else if (progress >= 10 && progress < 20) {
+                 // Just cut showing b/2s
+                drawDim(startX + xLen, startY - 10, startX + xLen + bHalf, startY - 10, "b/2");
+                drawDim(startX + xLen + bHalf, startY - 10, startX + xLen + bLen, startY - 10, "b/2");
+            } else if (progress > 90) {
+                // Final Dimensions
+                const finalSize = xLen + bHalf;
+                drawDim(startX, startY - 20, startX + finalSize, startY - 20, "x + b/2", 20);
+                drawDim(startX - 20, startY, startX - 20, startY + finalSize, "x + b/2", 20);
+            }
+
+            updateSteps(progress);
+        }
+
+        // --- Loop ---
+        function update() {
+            progress = parseFloat(slider.value);
+            pctDisplay.textContent = Math.round(progress) + "%";
+            render();
+        }
+
+        // Animation Loop
+        function animateStep() {
+            if(!isPlaying) return;
+            let val = parseFloat(slider.value);
+            val += 0.5; // Speed
+            
+            if(val > 100) {
+                val = 100;
+                isPlaying = false;
+                btnAnimate.textContent = "Replay";
+            }
+            
+            slider.value = val;
+            update();
+            requestAnimationFrame(animateStep);
+        }
+
+        slider.addEventListener('input', () => {
+            isPlaying = false;
+            btnAnimate.textContent = "Play";
+            update();
+        });
+
+        btnAnimate.addEventListener('click', () => {
+            if (parseFloat(slider.value) >= 100) {
+                slider.value = 0;
+            }
+            isPlaying = true;
+            btnAnimate.textContent = "Playing...";
+            animateStep();
+        });
+
+        btnReset.addEventListener('click', () => {
+            isPlaying = false;
+            slider.value = 0;
+            btnAnimate.textContent = "Play";
+            update();
+        });
+
+        // Initial
+        setTimeout(update, 500);
+
+    })();
+    </script>
+</body>
+</html>

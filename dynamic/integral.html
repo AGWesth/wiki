@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Integral Explorer: Riemann Sums</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+        canvas {
+            touch-action: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden flex flex-col md:flex-row">
+        
+        <!-- Controls & Math Panel -->
+        <div class="w-full md:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Integral Explorer</h1>
+                <p class="text-sm text-slate-500 mb-6">Area Under the Curve.<br>The limit of Riemann Sums.</p>
+
+                <!-- Function Display -->
+                <div class="bg-slate-800 text-white p-3 rounded-lg shadow-md text-center mb-6">
+                    <p class="text-xs text-slate-400 uppercase font-bold mb-1">Function</p>
+                    <div class="text-lg font-mono">
+                        \[ f(x) = 0.5x + 1 \]
+                    </div>
+                </div>
+
+                <!-- Sliders -->
+                <div class="space-y-6 mb-8">
+                    <!-- H Slider -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-bold text-emerald-600 text-sm">Bar Width (h)</label>
+                            <span id="val-h" class="text-emerald-600 font-mono text-sm">1.00</span>
+                        </div>
+                        <input type="range" id="slider-h" min="0.1" max="2" step="0.05" value="1.0" 
+                               class="w-full h-2 bg-emerald-100 rounded-lg appearance-none cursor-pointer accent-emerald-600">
+                        <div class="flex justify-between mt-2">
+                            <span class="text-xs text-slate-400">Coarse</span>
+                            <span class="text-xs text-slate-400">Fine</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Math Calculation Box -->
+                <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+                    <p class="text-xs text-slate-400 uppercase font-bold text-center border-b pb-2">Area Calculation (0 to 6)</p>
+                    
+                    <!-- Riemann Sum -->
+                    <div class="flex justify-between items-center">
+                        <div class="text-sm text-emerald-600 font-bold">
+                            Sum of Bars<br>
+                            <span class="text-[10px] font-normal text-slate-500">\(\sum f(x_i) \cdot h\)</span>
+                        </div>
+                        <div id="calc-sum" class="font-mono text-emerald-700 text-lg">0.00</div>
+                    </div>
+
+                    <!-- Exact Integral -->
+                    <div class="flex justify-between items-center pt-2 border-t border-slate-100">
+                        <div class="text-sm text-indigo-600 font-bold">
+                            Exact Integral<br>
+                            <span class="text-[10px] font-normal text-slate-500">\(\int_0^6 f(x) dx\)</span>
+                        </div>
+                        <div id="calc-exact" class="font-mono text-indigo-700 text-lg">15.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Teaching Note -->
+            <div class="mt-auto pt-6 border-t border-slate-200">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Key Concept</h3>
+                <p class="text-xs text-slate-600 leading-relaxed">
+                    Integration accumulates values. As the width \( h \) approaches zero, the jagged rectangles become the smooth area under the line.
+                </p>
+            </div>
+        </div>
+
+        <!-- Canvas Panel -->
+        <div class="w-full md:w-2/3 p-4 bg-white relative flex items-center justify-center bg-grid-slate-100">
+            <canvas id="integralCanvas" width="800" height="600" class="w-full h-auto rounded-lg shadow-inner bg-slate-50 border border-slate-200"></canvas>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const canvas = document.getElementById('integralCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // UI Elements
+        const sliderH = document.getElementById('slider-h');
+        const valH = document.getElementById('val-h');
+        const calcSum = document.getElementById('calc-sum');
+        const calcExact = document.getElementById('calc-exact');
+
+        // State
+        let hVal = 1.0;
+        let scaleX = 80; // Pixels per unit X
+        let scaleY = 80; // Pixels per unit Y
+        let origin = { x: 50, y: canvas.height - 50 }; // Origin position
+
+        // Function: f(x) = 0.5x + 1
+        function f(x) {
+            return 0.5 * x + 1;
+        }
+
+        // Integration Range
+        const startX = 0;
+        const endX = 6;
+
+        // --- Drawing Helpers ---
+
+        function toCanvas(x, y) {
+            return {
+                x: origin.x + (x * scaleX),
+                y: origin.y - (y * scaleY) // Inverted Y
+            };
+        }
+
+        function drawAxes() {
+            ctx.strokeStyle = '#cbd5e1'; // slate-300
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            
+            // X Axis
+            ctx.moveTo(origin.x, origin.y);
+            ctx.lineTo(canvas.width, origin.y);
+            
+            // Y Axis
+            ctx.moveTo(origin.x, origin.y);
+            ctx.lineTo(origin.x, 0);
+            ctx.stroke();
+
+            // Ticks X
+            ctx.fillStyle = '#94a3b8';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            for(let i = 0; i <= 8; i++) {
+                let pos = toCanvas(i, 0);
+                ctx.fillRect(pos.x, pos.y - 3, 1, 6);
+                ctx.fillText(i, pos.x, pos.y + 5);
+            }
+
+            // Ticks Y
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            for(let i = 0; i <= 6; i++) {
+                let pos = toCanvas(0, i);
+                ctx.fillRect(pos.x - 3, pos.y, 6, 1);
+                ctx.fillText(i, pos.x - 5, pos.y);
+            }
+        }
+
+        function drawLineGraph() {
+            ctx.beginPath();
+            ctx.strokeStyle = '#4f46e5'; // Indigo-600
+            ctx.lineWidth = 3;
+            
+            const startPos = toCanvas(startX, f(startX));
+            const endPos = toCanvas(endX, f(endX)); // Drawing a bit past 6
+            
+            ctx.moveTo(startPos.x, startPos.y);
+            ctx.lineTo(endPos.x, endPos.y);
+            ctx.stroke();
+        }
+
+        function render() {
+            // Clear
+            ctx.fillStyle = '#f8fafc'; // slate-50
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            drawAxes();
+
+            // --- Draw Rectangles (Left Riemann Sum) ---
+            let currentSum = 0;
+            
+            ctx.strokeStyle = '#059669'; // Emerald-600
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.2)'; // Emerald-500 20%
+            ctx.lineWidth = 1;
+
+            for(let x = startX; x < endX; x += hVal) {
+                // Ensure we don't go past endX due to floating point math
+                let width = hVal;
+                if (x + width > endX) width = endX - x;
+
+                let height = f(x); // Left Endpoint
+                let area = width * height;
+                currentSum += area;
+
+                let p1 = toCanvas(x, 0);
+                let p2 = toCanvas(x, height);
+                let p3 = toCanvas(x + width, height);
+                let p4 = toCanvas(x + width, 0);
+
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.lineTo(p3.x, p3.y);
+                ctx.lineTo(p4.x, p4.y);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            // Draw the actual function line on top
+            drawLineGraph();
+
+            // --- Update UI ---
+            valH.textContent = hVal.toFixed(2);
+            calcSum.textContent = currentSum.toFixed(4);
+            // Exact Area of trapezoid: width=6, h1=1, h2=4. Area = 6 * (1+4)/2 = 15
+            calcExact.textContent = "15.0000"; 
+        }
+
+        // --- Interaction ---
+
+        function update() {
+            hVal = parseFloat(sliderH.value);
+            render();
+        }
+
+        sliderH.addEventListener('input', update);
+
+        // Initial
+        render();
+
+    })();
+    </script>
+</body>
+</html>

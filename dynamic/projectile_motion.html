@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projectile Motion Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f8fafc; }
+        /* Custom Sliders */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+        .thumb-angle::-webkit-slider-thumb { background: #e11d48; }
+        .thumb-velocity::-webkit-slider-thumb { background: #2563eb; }
+        
+        canvas { touch-action: none; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden flex flex-col lg:flex-row">
+        
+        <!-- Controls Panel -->
+        <div class="w-full lg:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Projectile Motion</h1>
+                <p class="text-sm text-slate-500 mb-6">Kinematics & Trajectory.</p>
+
+                <!-- Status -->
+                <div id="status-card" class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex justify-between items-center transition-colors duration-300">
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase">Target Distance</p>
+                        <p id="val-target" class="text-xl font-mono font-bold text-slate-700">-- m</p>
+                    </div>
+                    <div class="text-right">
+                        <p id="status-text" class="text-sm font-bold text-indigo-600">Ready to Fire</p>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="space-y-6 mb-8">
+                    <!-- Angle -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-bold text-slate-700 text-sm text-rose-600">Launch Angle (\(\theta\))</label>
+                            <span id="val-angle" class="font-mono text-rose-600 font-bold">45°</span>
+                        </div>
+                        <input type="range" id="slider-angle" min="0" max="90" step="1" value="45" class="thumb-angle">
+                    </div>
+
+                    <!-- Velocity -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-bold text-slate-700 text-sm text-blue-600">Initial Velocity (\(v_0\))</label>
+                            <span id="val-velocity" class="font-mono text-blue-600 font-bold">50 m/s</span>
+                        </div>
+                        <input type="range" id="slider-velocity" min="10" max="150" step="1" value="50" class="thumb-velocity">
+                    </div>
+
+                    <button id="btn-fire" class="w-full py-4 rounded-xl bg-slate-800 text-white font-bold hover:bg-slate-700 transition shadow-lg flex items-center justify-center space-x-2 text-lg">
+                        <span>FIRE CANNON</span>
+                    </button>
+                </div>
+
+                <!-- Equations -->
+                <div class="bg-slate-100 p-4 rounded-xl border border-slate-200 space-y-3">
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-1">Trajectory Equation</p>
+                    
+                    <!-- General Form -->
+                    <div class="text-xs text-slate-500 overflow-x-auto">
+                        \[ y = x \tan(\theta) - \frac{g x^2}{2 v_0^2 \cos^2(\theta)} \]
+                    </div>
+
+                    <div class="border-t border-slate-200 my-2"></div>
+
+                    <!-- Specific Form -->
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-1">Current Parameters</p>
+                    <div id="eq-specific" class="text-xs text-slate-700 font-mono overflow-x-auto">
+                        Calculating...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Canvas Panel -->
+        <div class="w-full lg:w-2/3 p-0 relative bg-sky-50 flex items-end justify-center overflow-hidden">
+            <canvas id="simCanvas" class="w-full h-full block"></canvas>
+            
+            <!-- Scale Indicator -->
+            <div class="absolute bottom-4 right-4 bg-white/80 px-2 py-1 rounded text-xs font-mono text-slate-500 pointer-events-none">
+                1 px = <span id="scale-val">1</span> m
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Controls
+        const sAngle = document.getElementById('slider-angle');
+        const sVel = document.getElementById('slider-velocity');
+        const btnFire = document.getElementById('btn-fire');
+        
+        // Displays
+        const vAngle = document.getElementById('val-angle');
+        const vVel = document.getElementById('val-velocity');
+        const vTarget = document.getElementById('val-target');
+        const statusText = document.getElementById('status-text');
+        const statusCard = document.getElementById('status-card');
+        const eqSpecific = document.getElementById('eq-specific');
+        const scaleDisplay = document.getElementById('scale-val');
+
+        // Physics Constants
+        const g = 9.81; // Gravity m/s^2
+        
+        // State
+        let angle = 45; // Degrees
+        let v0 = 50;    // m/s
+        let targetX = 0;
+        let targetWidth = 40; // meters width of target
+        let isFiring = false;
+        let projTime = 0; // Simulation time
+        
+        // Viewport
+        let scale = 1.0; // pixels per meter
+        let origin = { x: 50, y: 0 }; // y set dynamically in resize
+
+        // Animation
+        let animFrame;
+
+        function resize() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = 500; // Fixed height for aspect ratio stability
+            origin.y = canvas.height - 50; // Ground level
+            
+            // Adjust scale to fit approx 300m horizontally
+            scale = canvas.width / 350; 
+            scaleDisplay.textContent = (1/scale).toFixed(2);
+            
+            if (targetX === 0) newTarget();
+            draw();
+        }
+        window.addEventListener('resize', resize);
+
+        function newTarget() {
+            // Random pos between 50m and 300m
+            targetX = 50 + Math.random() * 200;
+            vTarget.textContent = targetX.toFixed(1) + " m";
+            resetStatus();
+            draw();
+        }
+
+        function resetStatus() {
+            statusCard.className = "bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex justify-between items-center transition-colors duration-300";
+            statusText.textContent = "Ready to Fire";
+            statusText.className = "text-sm font-bold text-indigo-600";
+        }
+
+        // --- Physics Math ---
+
+        function getTrajectoryPoint(x) {
+            const theta = angle * Math.PI / 180;
+            // y = x * tan(theta) - (g * x^2) / (2 * v0^2 * cos^2(theta))
+            const term1 = x * Math.tan(theta);
+            const denom = 2 * Math.pow(v0, 2) * Math.pow(Math.cos(theta), 2);
+            // Avoid division by zero if v0 is 0 or cos is 0 (90 deg)
+            if (denom < 0.0001) return 0;
+            const term2 = (g * Math.pow(x, 2)) / denom;
+            return term1 - term2;
+        }
+
+        function updateEquations() {
+            const thetaRad = angle * Math.PI / 180;
+            const tanT = Math.tan(thetaRad).toFixed(2);
+            const cosT = Math.cos(thetaRad);
+            const denom = (2 * v0 * v0 * cosT * cosT).toFixed(1);
+            
+            // Formula string
+            const html = `\\[ y = ${tanT}x - \\frac{9.81 x^2}{${denom}} \\]`;
+            eqSpecific.innerHTML = html;
+            if(window.MathJax) MathJax.typesetPromise([eqSpecific]);
+        }
+
+        // --- Drawing ---
+
+        function toCanvas(x, y) {
+            return {
+                x: origin.x + x * scale,
+                y: origin.y - y * scale // Flip Y
+            };
+        }
+
+        function draw() {
+            // Clear
+            ctx.fillStyle = '#f0f9ff'; // Sky-50
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Ground
+            ctx.fillStyle = '#10b981'; // Emerald-500
+            ctx.fillRect(0, origin.y, canvas.width, canvas.height - origin.y);
+            ctx.strokeStyle = '#059669';
+            ctx.beginPath();
+            ctx.moveTo(0, origin.y);
+            ctx.lineTo(canvas.width, origin.y);
+            ctx.stroke();
+
+            // Target
+            const tLeft = toCanvas(targetX - targetWidth/2, 0).x;
+            const tWidthPx = targetWidth * scale;
+            ctx.fillStyle = '#ef4444'; // Red-500
+            ctx.fillRect(tLeft, origin.y - 5, tWidthPx, 5);
+            
+            // Target Range Indicators
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.1)';
+            ctx.beginPath();
+            ctx.arc(toCanvas(targetX, 0).x, origin.y, tWidthPx/2, Math.PI, 0);
+            ctx.fill();
+
+            // Trajectory Prediction (Dotted Line)
+            if (!isFiring) {
+                ctx.beginPath();
+                ctx.strokeStyle = '#94a3b8'; // Slate-400
+                ctx.setLineDash([5, 5]);
+                ctx.lineWidth = 2;
+                
+                let px = 0;
+                let py = 0;
+                ctx.moveTo(origin.x, origin.y);
+                
+                // Draw until it hits ground (y < 0) or goes off screen
+                for (let x = 0; x < 350; x += 5) {
+                    py = getTrajectoryPoint(x);
+                    if (py < -5) break; // Below ground
+                    const pos = toCanvas(x, py);
+                    ctx.lineTo(pos.x, pos.y);
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Cannon
+            const cPos = toCanvas(0, 0);
+            ctx.save();
+            ctx.translate(cPos.x, cPos.y);
+            ctx.rotate(-(angle * Math.PI / 180)); // Canvas rotation is clockwise positive, physics is CCW
+            ctx.fillStyle = '#1e293b'; // Slate-800
+            ctx.fillRect(0, -5, 40, 10); // Barrel
+            ctx.restore();
+            
+            // Wheel
+            ctx.beginPath();
+            ctx.fillStyle = '#475569';
+            ctx.arc(cPos.x, cPos.y + 5, 10, 0, Math.PI*2);
+            ctx.fill();
+
+            // Projectile (Animation)
+            if (isFiring) {
+                // x = v0 cos t
+                // y = v0 sin t - 0.5 g t^2
+                const theta = angle * Math.PI / 180;
+                const px = v0 * Math.cos(theta) * projTime;
+                const py = v0 * Math.sin(theta) * projTime - 0.5 * g * projTime * projTime;
+
+                const pos = toCanvas(px, py);
+
+                // Draw Ball
+                ctx.beginPath();
+                ctx.fillStyle = '#111827'; // Black
+                ctx.arc(pos.x, pos.y, 6, 0, Math.PI*2);
+                ctx.fill();
+
+                // Check collision or ground hit
+                if (py < 0) {
+                    stopFiring(px);
+                } else if (pos.x > canvas.width) {
+                    stopFiring(px); // Off screen
+                } else {
+                    projTime += 0.05; // Time step
+                    animFrame = requestAnimationFrame(draw);
+                }
+            }
+        }
+
+        function stopFiring(finalX) {
+            isFiring = false;
+            draw(); // Final frame
+
+            // Check Hit
+            // Hit if within target width
+            const dist = Math.abs(finalX - targetX);
+            const hitMargin = targetWidth / 2;
+
+            if (dist <= hitMargin) {
+                // Success
+                statusCard.className = "bg-emerald-50 p-4 rounded-xl shadow-sm border border-emerald-200 mb-6 flex justify-between items-center transition-colors duration-300";
+                statusText.textContent = "TARGET HIT!";
+                statusText.className = "text-sm font-bold text-emerald-600";
+                
+                // Auto reset after delay
+                setTimeout(() => {
+                    newTarget();
+                }, 1500);
+            } else {
+                // Miss
+                statusCard.className = "bg-rose-50 p-4 rounded-xl shadow-sm border border-rose-200 mb-6 flex justify-between items-center transition-colors duration-300";
+                statusText.textContent = dist > hitMargin ? (finalX < targetX ? "TOO SHORT" : "TOO LONG") : "MISS";
+                statusText.className = "text-sm font-bold text-rose-600";
+            }
+        }
+
+        function startFiring() {
+            if (isFiring) return;
+            isFiring = true;
+            projTime = 0;
+            resetStatus();
+            draw();
+        }
+
+        function updateUI() {
+            angle = parseInt(sAngle.value);
+            v0 = parseInt(sVel.value);
+            
+            vAngle.textContent = angle + "°";
+            vVel.textContent = v0 + " m/s";
+            
+            updateEquations();
+            if (!isFiring) draw();
+        }
+
+        // Listeners
+        sAngle.addEventListener('input', updateUI);
+        sVel.addEventListener('input', updateUI);
+        btnFire.addEventListener('click', startFiring);
+
+        // Init
+        resize();
+        updateUI();
+
+    })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inverse Function Explorer</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for the graph -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- MathJax for nice equations -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Custom range slider styling */
+        input[type=range] {
+            -webkit-appearance: none; 
+            width: 100%; 
+            background: transparent; 
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #6366f1; /* Indigo-500 */
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <!-- Main Container -->
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden flex flex-col md:flex-row">
+        
+        <!-- Controls & Info Panel -->
+        <div class="w-full md:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Inverse Explorer</h1>
+                <p class="text-sm text-slate-500 mb-6">Visualizing Inverse Functions.<br>Reflection across y = x.</p>
+
+                <!-- Equation Display -->
+                <div class="space-y-2 mb-6">
+                    <div class="bg-indigo-600 text-white p-3 rounded-lg shadow-md text-center">
+                        <div id="eq-exp" class="text-lg font-mono">
+                            \[ f(x) = 2^x \]
+                        </div>
+                    </div>
+                    <div class="bg-rose-600 text-white p-3 rounded-lg shadow-md text-center">
+                        <div id="eq-log" class="text-lg font-mono">
+                            \[ g(x) = \log_2(x) \]
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sliders -->
+                <div class="space-y-6">
+                    <!-- Base (b) -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-semibold text-slate-700">Base (b)</label>
+                            <span id="val-b" class="text-indigo-600 font-bold">2.0</span>
+                        </div>
+                        <input type="range" id="slider-b" min="0.5" max="5" step="0.1" value="2">
+                        <p class="text-xs text-slate-400 mt-2">Common Bases: 2 (Binary), e (Natural), 10 (Decimal)</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- "Teach to Learn" Note -->
+            <div class="mt-8 pt-6 border-t border-slate-200">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Concept Recall</h3>
+                <p class="text-xs text-slate-600 leading-relaxed mb-2">
+                    <span class="font-bold text-slate-800">Symmetry:</span> Notice how the <span class="text-indigo-600 font-bold">Blue</span> and <span class="text-rose-600 font-bold">Red</span> lines are perfect reflections of each other across the dashed <span class="text-slate-400 font-bold">Gray</span> line (y=x).
+                </p>
+                <p class="text-xs text-slate-600 leading-relaxed">
+                    If \( y = b^x \), then \( x = \log_b(y) \).
+                </p>
+            </div>
+        </div>
+
+        <!-- Graph Panel -->
+        <div class="w-full md:w-2/3 p-4 md:p-8 flex items-center justify-center bg-white relative">
+            <!-- Container with fixed aspect ratio to make y=x look like 45 degrees -->
+            <div class="w-full aspect-square relative max-h-[500px]">
+                <canvas id="inverseChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. Setup Data & Config ---
+        const ctx = document.getElementById('inverseChart').getContext('2d');
+        
+        // Generate X values
+        // We need a shared range to show the symmetry clearly
+        const rangeMin = -5;
+        const rangeMax = 10;
+        const step = 0.1;
+        
+        const xValues = [];
+        for (let i = rangeMin; i <= rangeMax; i += step) {
+            xValues.push(parseFloat(i.toFixed(1)));
+        }
+
+        // Initial Parameters
+        let b = 2;
+
+        // Function Generators
+        function getExponentialData(b) {
+            return xValues.map(x => ({
+                x: x,
+                y: Math.pow(b, x)
+            })).filter(pt => pt.y <= rangeMax && pt.y >= rangeMin); // Clip visual range
+        }
+
+        function getLogarithmicData(b) {
+            return xValues.map(x => {
+                // log_b(x) = ln(x) / ln(b)
+                if (x <= 0) return null; // Domain restriction
+                if (b === 1) return null; // Base cannot be 1
+                return {
+                    x: x,
+                    y: Math.log(x) / Math.log(b)
+                };
+            }).filter(pt => pt !== null && pt.y <= rangeMax && pt.y >= rangeMin);
+        }
+
+        function getIdentityLine() {
+            return xValues.map(x => ({ x: x, y: x }));
+        }
+
+        const data = {
+            datasets: [
+                {
+                    label: 'Exponential: b^x',
+                    data: getExponentialData(b),
+                    borderColor: '#4f46e5', // Indigo-600
+                    borderWidth: 3,
+                    pointRadius: 0,
+                    tension: 0.2
+                },
+                {
+                    label: 'Logarithmic: log_b(x)',
+                    data: getLogarithmicData(b),
+                    borderColor: '#e11d48', // Rose-600
+                    borderWidth: 3,
+                    pointRadius: 0,
+                    tension: 0.2
+                },
+                {
+                    label: 'Identity: y = x',
+                    data: getIdentityLine(),
+                    borderColor: '#94a3b8', // Slate-400
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                    tension: 0
+                }
+            ]
+        };
+
+        const config = {
+            type: 'line',
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: true, // Keep square to preserve 45deg symmetry
+                aspectRatio: 1, 
+                animation: { duration: 0 },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        position: 'center', // Axis passes through 0
+                        min: -5,
+                        max: 10,
+                        grid: { color: '#e2e8f0' },
+                        ticks: { stepSize: 1, color: '#64748b' }
+                    },
+                    y: {
+                        type: 'linear',
+                        position: 'center', // Axis passes through 0
+                        min: -5,
+                        max: 10,
+                        grid: { color: '#e2e8f0' },
+                        ticks: { stepSize: 1, color: '#64748b' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        mode: 'nearest',
+                        intersect: false,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += context.parsed.y.toFixed(2);
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        // --- 2. Initialize Chart ---
+        const myChart = new Chart(ctx, config);
+
+        // --- 3. Interactive Logic ---
+        const sliderB = document.getElementById('slider-b');
+        const valB = document.getElementById('val-b');
+        const eqExp = document.getElementById('eq-exp');
+        const eqLog = document.getElementById('eq-log');
+
+        function updateChart() {
+            b = parseFloat(sliderB.value);
+            
+            // Avoid b=1 singularity visual glitch
+            if(b === 1) b = 1.01;
+
+            valB.textContent = b.toFixed(1);
+
+            // Update Equations
+            // Exponential
+            const latexExp = `\\[ f(x) = ${b} ^ x \\]`;
+            eqExp.innerHTML = latexExp;
+            
+            // Logarithmic
+            const latexLog = `\\[ g(x) = \\log_{${b}}(x) \\]`;
+            eqLog.innerHTML = latexLog;
+
+            // Retrigger MathJax
+            if(window.MathJax) {
+                MathJax.typesetPromise([eqExp, eqLog]);
+            }
+
+            // Update Data
+            myChart.data.datasets[0].data = getExponentialData(b);
+            myChart.data.datasets[1].data = getLogarithmicData(b);
+            myChart.update();
+        }
+
+        // Listener
+        sliderB.addEventListener('input', updateChart);
+
+        // Initial MathJax render
+        window.addEventListener('load', () => {
+             if(window.MathJax) {
+                MathJax.typeset();
+            }
+        });
+
+    </script>
+</body>
+</html>

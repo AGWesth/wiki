@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radians vs Degrees Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+        canvas {
+            touch-action: none;
+        }
+        input[type=range] {
+            -webkit-appearance: none; 
+            width: 100%; 
+            background: transparent; 
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #4f46e5;
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-5xl overflow-hidden flex flex-col md:flex-row">
+        
+        <!-- Controls & Math Panel -->
+        <div class="w-full md:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Radians & Degrees</h1>
+                <p class="text-sm text-slate-500 mb-6">The Language of Angles.<br>Arbitrary (360) vs Natural (\(2\pi\)).</p>
+
+                <!-- Value Display -->
+                <div class="bg-slate-800 text-white p-6 rounded-xl shadow-lg mb-8 text-center space-y-4">
+                    <!-- Degrees -->
+                    <div>
+                        <p class="text-xs text-slate-400 uppercase font-bold mb-1">Degrees</p>
+                        <div id="disp-deg" class="text-3xl font-mono font-bold text-indigo-400">
+                            0&deg;
+                        </div>
+                    </div>
+                    <!-- Divider -->
+                    <div class="h-px bg-slate-600 w-1/2 mx-auto"></div>
+                    <!-- Radians -->
+                    <div>
+                        <p class="text-xs text-slate-400 uppercase font-bold mb-1">Radians</p>
+                        <div id="disp-rad" class="text-3xl font-mono font-bold text-rose-400">
+                            0.00 rad
+                        </div>
+                        <div id="disp-pi" class="text-sm text-slate-400 mt-1 font-mono">
+                            0 \pi
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Slider -->
+                <div class="mb-8">
+                    <label class="block text-sm font-bold text-slate-700 mb-2">Rotate Angle</label>
+                    <input type="range" id="slider-deg" min="0" max="360" value="0" step="1">
+                    <div class="flex justify-between text-xs text-slate-400 mt-1">
+                        <span>0&deg;</span>
+                        <span>180&deg;</span>
+                        <span>360&deg;</span>
+                    </div>
+                </div>
+
+                <!-- Formulas Box -->
+                <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+                    <p class="text-xs text-slate-400 uppercase font-bold border-b pb-2 text-center">Conversion Formulas</p>
+                    
+                    <div class="space-y-4">
+                        <!-- Deg to Rad -->
+                        <div class="text-sm text-slate-700">
+                            <span class="font-bold text-rose-600">Deg &to; Rad:</span>
+                            <div class="mt-1 pl-2 border-l-2 border-rose-200">
+                                \[ \text{rad} = \text{deg} \times \frac{\pi}{180} \]
+                            </div>
+                        </div>
+
+                        <!-- Rad to Deg -->
+                        <div class="text-sm text-slate-700">
+                            <span class="font-bold text-indigo-600">Rad &to; Deg:</span>
+                            <div class="mt-1 pl-2 border-l-2 border-indigo-200">
+                                \[ \text{deg} = \text{rad} \times \frac{180}{\pi} \]
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Calculation Preview -->
+            <div class="mt-4 pt-4 border-t border-slate-200">
+                 <div id="calc-preview" class="text-xs font-mono text-slate-500 text-center">
+                    Calculation preview...
+                </div>
+            </div>
+        </div>
+
+        <!-- Canvas Panel -->
+        <div class="w-full md:w-2/3 p-4 bg-white relative flex items-center justify-center bg-grid-slate-100">
+            <canvas id="angleCanvas" width="600" height="600" class="w-full h-auto max-w-[500px] rounded-lg shadow-inner bg-slate-50 border border-slate-200"></canvas>
+            
+            <!-- Floating label for visual learning -->
+            <div id="radius-label" class="absolute top-4 left-4 bg-indigo-100 text-indigo-800 text-xs px-2 py-1 rounded font-bold border border-indigo-200 opacity-0 transition-opacity">
+                Radius (r)
+            </div>
+            <div id="arc-label" class="absolute top-4 left-24 bg-rose-100 text-rose-800 text-xs px-2 py-1 rounded font-bold border border-rose-200 opacity-0 transition-opacity">
+                Arc Length (s)
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const canvas = document.getElementById('angleCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // UI Elements
+        const slider = document.getElementById('slider-deg');
+        const dispDeg = document.getElementById('disp-deg');
+        const dispRad = document.getElementById('disp-rad');
+        const dispPi = document.getElementById('disp-pi');
+        const calcPreview = document.getElementById('calc-preview');
+        const radLabel = document.getElementById('radius-label');
+        const arcLabel = document.getElementById('arc-label');
+
+        // Config
+        const scale = 180; // Radius size in pixels
+        const center = { x: 300, y: 300 };
+        let currentDeg = 57.3; // Start at approx 1 radian
+
+        // Initialize slider
+        slider.value = currentDeg;
+
+        function toRad(deg) {
+            return deg * (Math.PI / 180);
+        }
+
+        function drawScene(deg) {
+            // Clear
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const rad = toRad(deg);
+
+            // 1. Draw Base Circle (Faint)
+            ctx.beginPath();
+            ctx.strokeStyle = '#e2e8f0'; // slate-200
+            ctx.lineWidth = 2;
+            ctx.arc(center.x, center.y, scale, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            // 2. Draw Axes (Faint)
+            ctx.beginPath();
+            ctx.strokeStyle = '#f1f5f9'; // slate-100
+            ctx.lineWidth = 1;
+            ctx.moveTo(center.x - scale - 20, center.y);
+            ctx.lineTo(center.x + scale + 20, center.y);
+            ctx.moveTo(center.x, center.y - scale - 20);
+            ctx.lineTo(center.x, center.y + scale + 20);
+            ctx.stroke();
+
+            // 3. Draw Radius (Baseline, East)
+            ctx.beginPath();
+            ctx.strokeStyle = '#6366f1'; // Indigo-500
+            ctx.lineWidth = 4;
+            ctx.moveTo(center.x, center.y);
+            ctx.lineTo(center.x + scale, center.y);
+            ctx.stroke();
+
+            // Label 'r'
+            ctx.fillStyle = '#6366f1';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.fillText("r", center.x + scale/2, center.y + 20);
+
+            // 4. Draw Radius (Rotated)
+            const pX = center.x + scale * Math.cos(-rad); // Canvas Y inverted for math angles
+            const pY = center.y + scale * Math.sin(-rad);
+
+            ctx.beginPath();
+            ctx.strokeStyle = '#6366f1'; // Indigo-500
+            ctx.lineWidth = 4;
+            ctx.moveTo(center.x, center.y);
+            ctx.lineTo(pX, pY);
+            ctx.stroke();
+
+            // 5. Draw Arc (The Angle)
+            ctx.beginPath();
+            ctx.strokeStyle = '#e11d48'; // Rose-600
+            ctx.lineWidth = 6;
+            // Draw CCW from 0 to -rad
+            ctx.arc(center.x, center.y, scale, 0, -rad, true);
+            ctx.stroke();
+            
+            // Draw Arc Fill (Light)
+            ctx.beginPath();
+            ctx.fillStyle = 'rgba(225, 29, 72, 0.1)';
+            ctx.moveTo(center.x, center.y);
+            ctx.arc(center.x, center.y, scale, 0, -rad, true);
+            ctx.closePath();
+            ctx.fill();
+
+            // 6. Label Arc 's'
+            // Position label at mid-angle, slightly outside
+            const midRad = rad / 2;
+            const labelDist = scale + 30;
+            const lX = center.x + labelDist * Math.cos(-midRad);
+            const lY = center.y + labelDist * Math.sin(-midRad);
+            
+            ctx.fillStyle = '#e11d48';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText("s", lX, lY);
+
+            // Special Visual: If close to 1 radian, connect them
+            if(Math.abs(deg - 57.3) < 2) {
+                ctx.fillText("s ≈ r", lX + 30, lY);
+                radLabel.style.opacity = 1;
+                arcLabel.style.opacity = 1;
+            } else {
+                radLabel.style.opacity = 0;
+                arcLabel.style.opacity = 0;
+            }
+        }
+
+        function updateUI(deg) {
+            const rad = toRad(deg);
+            
+            // Displays
+            dispDeg.innerHTML = `${deg}&deg;`;
+            dispRad.innerHTML = `${rad.toFixed(2)} rad`;
+            
+            const piFrac = rad / Math.PI;
+            
+            // Nice Fractions for common angles
+            let piText = `${piFrac.toFixed(2)} \\pi`;
+            if (Math.abs(deg - 0) < 0.1) piText = "0";
+            if (Math.abs(deg - 90) < 0.1) piText = "\\frac{\\pi}{2}";
+            if (Math.abs(deg - 180) < 0.1) piText = "\\pi";
+            if (Math.abs(deg - 270) < 0.1) piText = "\\frac{3\\pi}{2}";
+            if (Math.abs(deg - 360) < 0.1) piText = "2\\pi";
+            if (Math.abs(deg - 45) < 0.1) piText = "\\frac{\\pi}{4}";
+            if (Math.abs(deg - 30) < 0.1) piText = "\\frac{\\pi}{6}";
+            if (Math.abs(deg - 60) < 0.1) piText = "\\frac{\\pi}{3}";
+
+            dispPi.innerHTML = `\\[ ${piText} \\]`;
+
+            // Live Calculation Text
+            calcPreview.textContent = `${deg} × (π / 180) = ${rad.toFixed(3)}`;
+
+            // Retrigger MathJax
+            if(window.MathJax) {
+                MathJax.typesetPromise([dispPi]);
+            }
+        }
+
+        function update() {
+            currentDeg = parseFloat(slider.value);
+            drawScene(currentDeg);
+            updateUI(currentDeg);
+        }
+
+        slider.addEventListener('input', update);
+
+        // Initial
+        update();
+        
+        // Trigger labels visibility initially if starting at 57.3
+        setTimeout(() => {
+            if(Math.abs(currentDeg - 57.3) < 2) {
+                radLabel.style.opacity = 1;
+                arcLabel.style.opacity = 1;
+            }
+        }, 500);
+
+    })();
+    </script>
+</body>
+</html>

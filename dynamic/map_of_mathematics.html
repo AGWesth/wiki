@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map of Mathematics</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    
+    <!-- Babel (to compile JSX in the browser) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script>
+      function goToWikiPage(pageId) {
+        // Send a message to the parent window (The Wiki)
+        window.parent.postMessage({ 
+          type: 'WIKI_NAVIGATE', 
+          articleId: pageId 
+        }, '*');
+      }
+    </script>
+
+    <style>
+        /* Custom smooth scrolling */
+        html { scroll-behavior: smooth; }
+        body { -webkit-font-smoothing: antialiased; }
+    </style>
+</head>
+<body class="bg-white">
+
+    <div id="root"></div>
+
+
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+
+
+        // --- Inline Icons (Replacing Lucide dependency for single-file portability) ---
+        const ArrowRight = ({ size = 24, className }) => (
+            <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width={size} 
+                height={size} 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                className={className}
+            >
+                <path d="M5 12h14" />
+                <path d="m12 5 7 7-7 7" />
+            </svg>
+        );
+
+        const ExternalLink = ({ size = 24, className }) => (
+            <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width={size} 
+                height={size} 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                className={className}
+            >
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+            </svg>
+        );
+
+        // --- Data & Configuration ---
+        const TOPICS = [
+          { 
+            id: 'counting', 
+            label: 'Number Theory', 
+            description: 'The properties of integers and prime numbers.',
+            x: 50, y: 90, 
+            color: '#3b82f6', // blue
+            icon: () => (
+              <g stroke="currentColor" strokeWidth="2" fill="none">
+                <circle cx="12" cy="12" r="10" opacity="0.2"/>
+                <text x="12" y="16" textAnchor="middle" fontSize="14" fill="currentColor" stroke="none" fontWeight="bold">ℕ</text>
+              </g>
+            )
+          },
+          { 
+            id: 'algebra', 
+            label: 'Algebra', 
+            url: 'http://localhost:8000/Users/ANDREASW.ICE/OneDrive%20-%20Xellia%20Pharmaceuticals/automations/wiki/algebra',
+            description: 'The study of symbols and the rules for manipulating them.',
+            x: 50, y: 70, 
+            color: '#8b5cf6', // violet
+            icon: () => (
+              <g stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M8 8l8 8M16 8l-8 8" />
+                <path d="M20 12h-4" />
+              </g>
+            )
+          },
+          { 
+            id: 'geometry', 
+            label: 'Geometry', 
+            description: 'Shapes, sizes, and the properties of space.',
+            x: 20, y: 75, 
+            color: '#10b981', // emerald
+            icon: () => (
+              <g stroke="currentColor" strokeWidth="2" fill="none">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 3 L21 21 L3 21 Z" opacity="0.5"/>
+              </g>
+            )
+          },
+          { 
+            id: 'combinatorics', 
+            label: 'Combinatorics', 
+            description: 'Counting, arrangement, and permutation.',
+            x: 80, y: 75, 
+            color: '#f59e0b', // amber
+            icon: () => (
+              <g stroke="currentColor" strokeWidth="2" fill="none">
+                <rect x="4" y="4" width="6" height="6" rx="1" />
+                <rect x="14" y="4" width="6" height="6" rx="1" />
+                <rect x="4" y="14" width="6" height="6" rx="1" />
+                <rect x="14" y="14" width="6" height="6" rx="1" opacity="0.3" />
+              </g>
+            )
+          },
+          { 
+            id: 'functions', 
+            label: 'Functions', 
+            description: 'Relationships between input and output.',
+            x: 50, y: 50, 
+            color: '#ec4899', // pink
+            icon: () => (
+              <g stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round">
+                <path d="M4 20 C 8 10, 16 10, 20 4" />
+                <path d="M4 4 L4 20 L20 20" strokeWidth="1.5" opacity="0.5"/>
+              </g>
+            )
+          },
+          { 
+            id: 'trig', 
+            label: 'Trigonometry', 
+            description: 'Relationships involving lengths and angles of triangles.',
+            x: 25, y: 55, 
+            color: '#06b6d4', // cyan
+            icon: () => (
+              <g stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round">
+                <path d="M4 20 L 20 20 L 20 4 Z" />
+                <path d="M8 16c2 2 4 0 4 0" opacity="0.5"/>
+              </g>
+            )
+          },
+          { 
+            id: 'graphtheory', 
+            label: 'Graph Theory', 
+            description: 'The study of graphs and pairwise relations.',
+            x: 75, y: 55, 
+            color: '#f97316', // orange
+            icon: () => (
+              <g stroke="currentColor" strokeWidth="2" fill="none">
+                <circle cx="6" cy="12" r="3" fill="currentColor" fillOpacity="0.2"/>
+                <circle cx="18" cy="6" r="3" fill="currentColor" fillOpacity="0.2"/>
+                <circle cx="18" cy="18" r="3" fill="currentColor" fillOpacity="0.2"/>
+                <line x1="9" y1="12" x2="15" y2="7.5" opacity="0.5"/>
+                <line x1="9" y1="12" x2="15" y2="16.5" opacity="0.5"/>
+                <line x1="18" y1="9" x2="18" y2="15" opacity="0.5"/>
+              </g>
+            )
+          },
+          { 
+            id: 'calculus', 
+            label: 'Calculus', 
+            description: 'Continuous change, derivatives, and integrals.',
+            x: 50, y: 25, 
+            color: '#ef4444', // red
+            icon: () => (
+              <g stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round">
+                <path d="M9 4 C 15 4, 15 8, 12 12 C 9 16, 9 20, 15 20" />
+              </g>
+            )
+          },
+          { 
+            id: 'linalg', 
+            label: 'Linear Algebra', 
+            description: 'Linear equations, matrices, and vector spaces.',
+            x: 25, y: 30, 
+            color: '#6366f1', // indigo
+            icon: () => (
+              <g stroke="currentColor" strokeWidth="2" fill="none">
+                <path d="M5 4v16" />
+                <path d="M19 4v16" />
+                <circle cx="9" cy="8" r="1.5" fill="currentColor"/>
+                <circle cx="15" cy="8" r="1.5" fill="currentColor"/>
+                <circle cx="9" cy="16" r="1.5" fill="currentColor"/>
+                <circle cx="15" cy="16" r="1.5" fill="currentColor"/>
+              </g>
+            )
+          },
+          { 
+            id: 'vectorcalc', 
+            label: 'Vector Calculus', 
+            description: 'Differentiation and integration of vector fields.',
+            x: 65, y: 15, 
+            color: '#8b5cf6', // purple
+            icon: () => (
+              <g stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round">
+                 <path d="M4 20 L 12 12" />
+                 <path d="M12 12 L 10 16 M 12 12 L 8 12" /> 
+                 <path d="M12 12 L 20 4" />
+                 <path d="M20 4 L 16 6 M 20 4 L 18 9" />
+              </g>
+            )
+          },
+        ];
+
+        const CONNECTIONS = [
+          ['counting', 'algebra'],
+          ['counting', 'combinatorics'],
+          ['geometry', 'trig'],
+          ['geometry', 'algebra'],
+          ['algebra', 'functions'],
+          ['algebra', 'graphtheory'],
+          ['combinatorics', 'graphtheory'],
+          ['functions', 'calculus'],
+          ['functions', 'trig'],
+          ['trig', 'calculus'],
+          ['linalg', 'geometry'],
+          ['linalg', 'calculus'],
+          ['calculus', 'vectorcalc'],
+          ['linalg', 'vectorcalc'],
+        ];
+
+        // --- Sub-Components ---
+        const HeroText = () => (
+          <div className="max-w-md z-10 pointer-events-auto">
+            <h1 className="text-5xl md:text-7xl font-serif font-bold text-slate-900 leading-[0.9] mb-6">
+              Map of<br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">Mathematics</span>
+            </h1>
+            <p className="text-slate-600 text-lg mb-8 leading-relaxed">
+              Select a topic to begin exploring the interconnected landscape of mathematics.
+            </p>
+          </div>
+        );
+
+        // --- Main Application ---
+        function App() {
+          const [hoveredNode, setHoveredNode] = useState(null);
+          const [activeNode, setActiveNode] = useState(null);
+          const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+          const containerRef = useRef(null);
+
+          // Gentle float animation state
+          const [time, setTime] = useState(0);
+
+          useEffect(() => {
+            let animationFrame;
+            const animate = () => {
+              setTime(t => t + 0.01);
+              animationFrame = requestAnimationFrame(animate);
+            };
+            animate();
+            return () => cancelAnimationFrame(animationFrame);
+          }, []);
+
+          // Handle mouse move for parallax/interaction
+          const handleMouseMove = (e) => {
+            if (!containerRef.current) return;
+            const rect = containerRef.current.getBoundingClientRect();
+            setMousePos({
+              x: (e.clientX - rect.left) / rect.width,
+              y: (e.clientY - rect.top) / rect.height
+            });
+          };
+
+          const getNodePos = (node) => {
+            // Base position
+            let x = node.x;
+            let y = node.y;
+
+            // Gentle floating
+            const floatY = Math.sin(time + node.x) * 1.5;
+            const floatX = Math.cos(time + node.y) * 1.0;
+            
+            // Mouse parallax (subtle)
+            const parallaxX = (mousePos.x - 0.5) * 5; 
+            const parallaxY = (mousePos.y - 0.5) * 5;
+
+            return { 
+              x: x + floatX + parallaxX, 
+              y: y + floatY + parallaxY 
+            };
+          };
+
+          const handleNodeClick = (node) => {
+            setActiveNode(node);
+          };
+
+          const handleNavigate = (node) => {
+              window.location.href = `${node.url}`; 
+          };
+
+          return (
+            <div className="min-h-screen bg-white relative overflow-hidden font-sans selection:bg-blue-100 flex flex-col md:flex-row">
+              
+              {/* Background Grid Pattern (Global) */}
+              <div 
+                className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none"
+                style={{
+                  backgroundImage: `linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)`,
+                  backgroundSize: '40px 40px'
+                }}
+              />
+              
+              {/* Left Column: Text */}
+              <div className="w-full md:w-1/3 flex flex-col justify-center p-8 md:p-16 z-20 bg-gradient-to-b from-white via-white to-transparent md:bg-none relative">
+                 <HeroText />
+              </div>
+
+              {/* Right Column: Map */}
+              <div 
+                ref={containerRef}
+                onMouseMove={handleMouseMove}
+                className="w-full md:w-2/3 h-[500px] md:h-screen relative z-10 flex items-center justify-center cursor-crosshair"
+              >
+                <div className="relative w-full h-full max-w-4xl">
+                  
+                  <svg className="w-full h-full pointer-events-none">
+                    {/* Draw Connections */}
+                    {CONNECTIONS.map(([startId, endId], i) => {
+                      const startNode = TOPICS.find(n => n.id === startId);
+                      const endNode = TOPICS.find(n => n.id === endId);
+                      const startPos = getNodePos(startNode);
+                      const endPos = getNodePos(endNode);
+
+                      // Check if connection is highlighted
+                      const isHighlighted = hoveredNode && (hoveredNode.id === startId || hoveredNode.id === endId);
+
+                      return (
+                        <line 
+                          key={i}
+                          x1={`${startPos.x}%`} 
+                          y1={`${startPos.y}%`} 
+                          x2={`${endPos.x}%`} 
+                          y2={`${endPos.y}%`} 
+                          stroke={isHighlighted ? "#3b82f6" : "#e2e8f0"} 
+                          strokeWidth={isHighlighted ? 2 : 1}
+                          strokeDasharray={isHighlighted ? "none" : "5,5"}
+                          className="transition-all duration-300 ease-out"
+                        />
+                      );
+                    })}
+                  </svg>
+
+                  {/* Draw Nodes */}
+                  {TOPICS.map((node) => {
+                    const pos = getNodePos(node);
+                    const isHovered = hoveredNode?.id === node.id;
+                    const isDimmed = hoveredNode && !isHovered && 
+                      !CONNECTIONS.some(c => c.includes(node.id) && c.includes(hoveredNode.id));
+
+                    return (
+                      <div
+                        key={node.id}
+                        className={`absolute transform -translate-x-1/2 -translate-y-1/2 group transition-all duration-500 ease-out`}
+                        style={{ 
+                          left: `${pos.x}%`, 
+                          top: `${pos.y}%`,
+                          zIndex: isHovered ? 50 : 10,
+                          opacity: isDimmed ? 0.3 : 1
+                        }}
+                        onMouseEnter={() => setHoveredNode(node)}
+                        onMouseLeave={() => setHoveredNode(null)}
+                        onClick={() => handleNodeClick(node)}
+                      >
+                        {/* Node Circle */}
+                        <div 
+                          className={`
+                            relative flex items-center justify-center rounded-full 
+                            bg-white shadow-xl cursor-pointer border-2 transition-all duration-300
+                            ${isHovered ? 'w-20 h-20 scale-110' : 'w-14 h-14'}
+                          `}
+                          style={{ borderColor: isHovered ? node.color : 'transparent' }}
+                        >
+                          <div className={`text-slate-700 transition-transform duration-300 p-2 ${isHovered ? 'scale-125' : 'scale-100'}`}>
+                            <svg viewBox="0 0 24 24" className="w-full h-full overflow-visible">
+                                {node.icon()}
+                            </svg>
+                          </div>
+                          
+                          {/* Pulse Effect */}
+                          {!hoveredNode && (
+                            <div className="absolute inset-0 rounded-full bg-blue-400 opacity-0 group-hover:animate-ping" />
+                          )}
+                        </div>
+
+                        {/* Label */}
+                        <div 
+                          className={`
+                            absolute top-full left-1/2 -translate-x-1/2 mt-3 text-center pointer-events-none w-48
+                            transition-all duration-300
+                            ${isHovered ? 'translate-y-2' : 'translate-y-0'}
+                          `}
+                        >
+                          <h3 className={`font-serif font-bold text-slate-800 bg-white/90 px-2 rounded backdrop-blur-sm ${isHovered ? 'text-lg' : 'text-sm'}`}>
+                            {node.label}
+                          </h3>
+                        </div>
+
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Wiki-style Modal */}
+              {activeNode && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-sm transition-all animate-in fade-in">
+                  <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+                    
+                    {/* Header with Icon */}
+                    <div className={`h-24 flex items-center justify-center`} style={{ backgroundColor: activeNode.color + '15' }}>
+                      <div className="w-12 h-12 text-slate-800">
+                         <svg viewBox="0 0 24 24" className="w-full h-full overflow-visible">
+                            {activeNode.icon()}
+                        </svg>
+                      </div>
+                    </div>
+
+                    <div className="p-8">
+                      <h2 className="text-2xl font-serif font-bold text-slate-900 mb-2">{activeNode.label}</h2>
+                      <p className="text-slate-600 mb-8 text-base leading-relaxed">{activeNode.description}</p>
+                      
+                      <div className="flex gap-3">
+                        <button 
+                          className="flex-1 bg-slate-900 text-white py-2.5 rounded-lg hover:bg-blue-600 transition-colors font-medium flex items-center justify-center gap-2"
+                          onClick={() => handleNavigate(activeNode)}
+                        >
+                          Go to Page <ExternalLink size={16}/>
+                        </button>
+                        <button 
+                          onClick={() => setActiveNode(null)}
+                          className="px-5 py-2.5 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors text-slate-600 font-medium"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

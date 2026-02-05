@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slope & Rate of Change Explorer</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax for nice equations -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+        canvas {
+            cursor: crosshair;
+            touch-action: none; /* Prevent scrolling on mobile while touching canvas */
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <!-- Main Container -->
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-5xl overflow-hidden flex flex-col md:flex-row">
+        
+        <!-- Controls & Math Panel -->
+        <div class="w-full md:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Slope Explorer</h1>
+                <p class="text-sm text-slate-500 mb-6">Master Rate of Change.<br>Click grid to pick points.</p>
+
+                <!-- Instructions / State -->
+                <div id="instruction-box" class="bg-yellow-100 text-yellow-800 px-4 py-3 rounded-lg text-sm font-semibold mb-6 border border-yellow-200">
+                    Click to set Point 1
+                </div>
+
+                <!-- Equation Display -->
+                <div id="math-container" class="opacity-50 transition-opacity duration-300">
+                    <!-- General Formula -->
+                    <div class="bg-white p-3 rounded-lg shadow-sm border border-slate-200 mb-4">
+                        <p class="text-xs text-slate-400 uppercase font-bold mb-1">Formula</p>
+                        <div class="text-lg text-slate-700">
+                            \[ m = \frac{\text{Rise}}{\text{Run}} = \frac{y_2 - y_1}{x_2 - x_1} \]
+                        </div>
+                    </div>
+
+                    <!-- Calculation -->
+                    <div class="bg-indigo-600 text-white p-4 rounded-xl shadow-lg text-center">
+                        <p class="text-xs text-indigo-200 uppercase font-bold mb-2">Calculation</p>
+                        <div id="calc-display" class="text-xl font-mono">
+                            \[ m = \text{...} \]
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- "Teach to Learn" Note -->
+            <div class="mt-auto pt-6 border-t border-slate-200">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Concept Recall</h3>
+                <p class="text-xs text-slate-600 leading-relaxed mb-2">
+                    <span class="font-bold text-indigo-600">Slope (m)</span>: How much \(y\) changes for every unit of \(x\).
+                </p>
+                <div class="flex items-center space-x-2 text-xs text-slate-500">
+                    <label class="flex items-center cursor-pointer">
+                        <input type="checkbox" id="snap-toggle" class="form-checkbox text-indigo-600 rounded" checked>
+                        <span class="ml-2">Snap to Integers</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Canvas Panel -->
+        <div class="w-full md:w-2/3 p-4 bg-white relative flex items-center justify-center bg-grid-slate-100">
+            <canvas id="slopeCanvas" width="600" height="600" class="w-full max-w-[500px] h-auto rounded-lg shadow-inner bg-slate-50 border border-slate-200"></canvas>
+            
+            <!-- Floating Coordinates (Tooltip style) -->
+            <div id="coords-tooltip" class="absolute pointer-events-none bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 transition-opacity">
+                0, 0
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('slopeCanvas');
+        const ctx = canvas.getContext('2d');
+        const instructionBox = document.getElementById('instruction-box');
+        const mathContainer = document.getElementById('math-container');
+        const calcDisplay = document.getElementById('calc-display');
+        const tooltip = document.getElementById('coords-tooltip');
+        const snapToggle = document.getElementById('snap-toggle');
+
+        // Logic State
+        let points = []; // Array of objects {x, y}
+        const range = 10; // -10 to 10
+        let gridSize = canvas.width / (range * 2); // Pixels per unit
+
+        // --- 1. Drawing Functions ---
+
+        function transform(x, y) {
+            // Convert logical (x, y) to canvas (px, py)
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            return {
+                x: cx + (x * gridSize),
+                y: cy - (y * gridSize)
+            };
+        }
+
+        function inverseTransform(px, py) {
+            // Convert canvas (px, py) to logical (x, y)
+            const rect = canvas.getBoundingClientRect();
+            // Scale factors in case canvas is resized via CSS
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+
+            const rawX = (px * scaleX - cx) / gridSize;
+            const rawY = (cy - py * scaleY) / gridSize;
+            
+            return { x: rawX, y: rawY };
+        }
+
+        function drawGrid() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+
+            ctx.lineWidth = 1;
+            
+            // Minor Grid Lines
+            ctx.strokeStyle = '#e2e8f0'; // slate-200
+            ctx.beginPath();
+            for(let i = 0; i <= range * 2; i++) {
+                // Vertical
+                ctx.moveTo(i * gridSize, 0);
+                ctx.lineTo(i * gridSize, canvas.height);
+                // Horizontal
+                ctx.moveTo(0, i * gridSize);
+                ctx.lineTo(canvas.width, i * gridSize);
+            }
+            ctx.stroke();
+
+            // Axes
+            ctx.strokeStyle = '#94a3b8'; // slate-400
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            // X Axis
+            ctx.moveTo(0, cy);
+            ctx.lineTo(canvas.width, cy);
+            // Y Axis
+            ctx.moveTo(cx, 0);
+            ctx.lineTo(cx, canvas.height);
+            ctx.stroke();
+
+            // Axis Labels
+            ctx.fillStyle = '#64748b';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            
+            // X ticks
+            for(let x = -range; x <= range; x += 2) {
+                if(x === 0) continue;
+                const pos = transform(x, 0);
+                ctx.fillText(x.toString(), pos.x, cy + 5);
+            }
+            
+            // Y ticks
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            for(let y = -range; y <= range; y += 2) {
+                if(y === 0) continue;
+                const pos = transform(0, y);
+                ctx.fillText(y.toString(), cx - 5, pos.y);
+            }
+        }
+
+        function drawPoint(p, color, label) {
+            const pos = transform(p.x, p.y);
+            
+            // Dot
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Label
+            ctx.fillStyle = '#1e293b'; // slate-800
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(label || `(${p.x}, ${p.y})`, pos.x + 10, pos.y - 10);
+        }
+
+        function drawSlopeVisuals(p1, p2) {
+            const start = transform(p1.x, p1.y);
+            const end = transform(p2.x, p2.y);
+            const corner = transform(p2.x, p1.y); // Corner of the right triangle
+
+            // 1. Rise/Run Triangle
+            ctx.setLineDash([5, 5]);
+            ctx.strokeStyle = '#6366f1'; // Indigo-500
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            // Run (Horizontal)
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(corner.x, corner.y);
+            // Rise (Vertical)
+            ctx.lineTo(end.x, end.y);
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset
+
+            // 2. The Line itself
+            ctx.strokeStyle = '#1e293b'; // Slate-800
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            // Extend slightly past points for visual "line" feel
+            // (Simplified: just draw segment for now)
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(end.x, end.y);
+            ctx.stroke();
+
+            // 3. Labels for Rise/Run
+            ctx.fillStyle = '#6366f1';
+            ctx.font = 'bold 12px sans-serif';
+            
+            // Run Label
+            const runMid = { x: (start.x + corner.x)/2, y: start.y };
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(`Run: ${p2.x - p1.x}`, runMid.x, runMid.y + 5);
+
+            // Rise Label
+            const riseMid = { x: corner.x, y: (corner.y + end.y)/2 };
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`Rise: ${p2.y - p1.y}`, riseMid.x + 5, riseMid.y);
+        }
+
+        function updateMath(p1, p2) {
+            const rise = parseFloat((p2.y - p1.y).toFixed(2));
+            const run = parseFloat((p2.x - p1.x).toFixed(2));
+            let slope = "Undefined";
+            
+            if (run !== 0) {
+                slope = parseFloat((rise / run).toFixed(2));
+            }
+
+            // LaTeX construction
+            const latex = `\\[ m = \\frac{${rise}}{${run}} = ${slope} \\]`;
+            calcDisplay.innerHTML = latex;
+            
+            if(window.MathJax) {
+                MathJax.typesetPromise([calcDisplay]);
+            }
+        }
+
+        function render() {
+            drawGrid();
+
+            // Draw Point 1
+            if(points.length > 0) {
+                drawPoint(points[0], '#e11d48', 'P1'); // Rose-600
+            }
+
+            // Draw Point 2 & Visuals
+            if(points.length > 1) {
+                drawSlopeVisuals(points[0], points[1]);
+                drawPoint(points[1], '#4f46e5', 'P2'); // Indigo-600
+            }
+        }
+
+        // --- 2. Interactions ---
+
+        canvas.addEventListener('mousemove', (e) => {
+            const raw = inverseTransform(e.offsetX, e.offsetY);
+            let displayX = raw.x.toFixed(1);
+            let displayY = raw.y.toFixed(1);
+
+            if (snapToggle.checked) {
+                displayX = Math.round(raw.x);
+                displayY = Math.round(raw.y);
+            }
+
+            // Update tooltip position and text
+            tooltip.style.left = (e.pageX + 15) + 'px';
+            tooltip.style.top = (e.pageY + 15) + 'px';
+            tooltip.textContent = `${displayX}, ${displayY}`;
+            tooltip.style.opacity = 1;
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            tooltip.style.opacity = 0;
+        });
+
+        canvas.addEventListener('click', (e) => {
+            const raw = inverseTransform(e.offsetX, e.offsetY);
+            let x = raw.x;
+            let y = raw.y;
+
+            if (snapToggle.checked) {
+                x = Math.round(x);
+                y = Math.round(y);
+            } else {
+                x = parseFloat(x.toFixed(1));
+                y = parseFloat(y.toFixed(1));
+            }
+
+            // State Logic
+            if (points.length === 2) {
+                // "Change the first pick" -> Start over logic
+                points = [{x, y}];
+                instructionBox.textContent = "Click to set Point 2";
+                instructionBox.className = "bg-blue-100 text-blue-800 px-4 py-3 rounded-lg text-sm font-semibold mb-6 border border-blue-200";
+                mathContainer.classList.add('opacity-50'); // Dim math
+            } else if (points.length === 0) {
+                points.push({x, y});
+                instructionBox.textContent = "Click to set Point 2";
+                instructionBox.className = "bg-blue-100 text-blue-800 px-4 py-3 rounded-lg text-sm font-semibold mb-6 border border-blue-200";
+            } else {
+                points.push({x, y});
+                instructionBox.textContent = "Click anywhere to restart";
+                instructionBox.className = "bg-green-100 text-green-800 px-4 py-3 rounded-lg text-sm font-semibold mb-6 border border-green-200";
+                
+                // Show Math
+                mathContainer.classList.remove('opacity-50');
+                updateMath(points[0], points[1]);
+            }
+
+            render();
+        });
+
+        // Initial Draw
+        render();
+
+        // Handle Resize
+        window.addEventListener('resize', render);
+
+    </script>
+</body>
+</html>

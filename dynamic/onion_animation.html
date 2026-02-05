@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculus Animation: Circle Area</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+        canvas {
+            touch-action: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden flex flex-col md:flex-row">
+        
+        <!-- Info Panel -->
+        <div class="w-full md:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Calculus Animation</h1>
+                <p class="text-sm text-slate-500 mb-6">Area of a Circle via Unrolling.</p>
+
+                <!-- Status Display -->
+                <div class="bg-slate-800 text-white p-6 rounded-xl shadow-lg mb-8 text-center transition-all duration-500">
+                    <p class="text-xs text-slate-400 uppercase font-bold mb-2">Current Resolution</p>
+                    <div id="resolution-display" class="text-3xl font-mono font-bold text-emerald-400">
+                        N = 5
+                    </div>
+                    <p id="status-text" class="text-xs text-slate-300 mt-2 italic">Unrolling rings...</p>
+                </div>
+
+                <!-- Math Concept -->
+                <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+                    <p class="text-xs text-slate-400 uppercase font-bold border-b pb-2">Mathematical Insight</p>
+                    
+                    <div class="text-sm text-slate-600 space-y-3">
+                        <p>
+                            <span class="font-bold text-emerald-600">1. Slicing:</span> 
+                            We cut the circle into thin concentric rings of thickness \( dr \).
+                        </p>
+                        <p>
+                            <span class="font-bold text-blue-600">2. Unrolling:</span> 
+                            A ring at radius \( r \) has a circumference \( 2\pi r \). When straightened, it becomes a rectangle.
+                        </p>
+                        <p>
+                            <span class="font-bold text-indigo-600">3. Integration:</span> 
+                            Stacking these rectangles creates a triangle with base \( R \) and height \( 2\pi R \).
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Area Formula -->
+            <div class="mt-8 pt-6 border-t border-slate-200 text-center">
+                 <div class="text-lg text-slate-700">
+                    \[ \text{Area} = \int_0^R 2\pi r \, dr = \pi R^2 \]
+                </div>
+            </div>
+        </div>
+
+        <!-- Canvas Panel -->
+        <div class="w-full md:w-2/3 p-4 bg-white relative flex items-center justify-center bg-grid-slate-100">
+            <canvas id="animCanvas" width="800" height="600" class="w-full h-auto rounded-lg shadow-inner bg-slate-50 border border-slate-200"></canvas>
+            
+            <!-- Labels overlay -->
+            <div class="absolute top-4 left-4 text-xs font-bold text-slate-400">Circle Domain</div>
+            <div class="absolute top-4 right-4 text-xs font-bold text-slate-400">Linear Graph Domain</div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const canvas = document.getElementById('animCanvas');
+        const ctx = canvas.getContext('2d');
+        const resDisplay = document.getElementById('resolution-display');
+        const statusText = document.getElementById('status-text');
+
+        // Animation Config
+        const resolutions = [4, 8, 16, 32, 64];
+        let resIndex = 0;
+        let numRings = resolutions[0];
+        
+        // Layout
+        const centerLeft = { x: 200, y: 300 }; // Circle Center
+        const graphOrigin = { x: 450, y: 500 }; // Graph Origin
+        const maxRadius = 150;
+        const graphWidth = 300; // Represents R
+        const graphHeight = 300; // Represents 2*pi*R roughly (scaled)
+
+        // Animation State
+        let phase = 'circle'; // 'circle', 'unroll', 'hold', 'reset'
+        let progress = 0; // 0 to 1
+        let lastTime = 0;
+        const holdTime = 1500; // ms
+        let holdTimer = 0;
+
+        // Easing function
+        function easeInOutCubic(t) {
+            return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        }
+
+        function drawScene(t) {
+            // Clear
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Graph Axes
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(graphOrigin.x, graphOrigin.y);
+            ctx.lineTo(graphOrigin.x + graphWidth + 20, graphOrigin.y); // X axis (Radius)
+            ctx.moveTo(graphOrigin.x, graphOrigin.y);
+            ctx.lineTo(graphOrigin.x, graphOrigin.y - graphHeight - 20); // Y axis (Circumference)
+            ctx.stroke();
+
+            // Labels
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText("Radius (r)", graphOrigin.x + graphWidth/2, graphOrigin.y + 20);
+            ctx.save();
+            ctx.translate(graphOrigin.x - 30, graphOrigin.y - graphHeight/2);
+            ctx.rotate(-Math.PI/2);
+            ctx.fillText("Circumference (2πr)", 0, 0);
+            ctx.restore();
+
+
+            // Draw Rings
+            const ringThick = maxRadius / numRings;
+            
+            for (let i = 0; i < numRings; i++) {
+                // Properties of this ring
+                const r = (i + 1) * ringThick; // Outer radius of this ring
+                const prevR = i * ringThick; // Inner radius
+                const avgR = (r + prevR) / 2;
+                
+                // Color gradient
+                const hue = 160 + (i / numRings) * 60; // Emerald to Blue
+                ctx.fillStyle = `hsla(${hue}, 70%, 50%, 0.6)`;
+                ctx.strokeStyle = `hsla(${hue}, 70%, 40%, 0.8)`;
+                ctx.lineWidth = 1;
+
+                // --- Interpolation Math ---
+                // We map points from Circle Shape to Rectangle Shape
+                // Circle: Center (centerLeft), Radius avgR
+                // Rectangle: Center (graphOrigin.x + avgR, graphOrigin.y - circ/2), Width ringThick, Height circ
+                
+                // Effective X position on graph for this ring
+                // We map the circle radius (0 to maxRadius) to the graph width (0 to graphWidth)
+                const graphX = graphOrigin.x + (avgR / maxRadius) * graphWidth;
+                
+                // Height of the bar corresponds to circumference
+                // Scale factor: If maxRadius maps to graphWidth, circumference maps to graphHeight
+                const circumference = 2 * Math.PI * avgR;
+                const barHeight = (circumference / (2 * Math.PI * maxRadius)) * graphHeight;
+
+                // Points generation
+                const points = [];
+                const segments = 40; // Resolution of the ring drawing
+                
+                for(let j = 0; j <= segments; j++) {
+                    const angleNorm = j / segments; // 0 to 1
+                    const angleRad = -Math.PI/2 + angleNorm * 2 * Math.PI; // Start at top, go clockwise
+                    
+                    // Circle State Position
+                    const cx = centerLeft.x + avgR * Math.cos(angleRad);
+                    const cy = centerLeft.y + avgR * Math.sin(angleRad);
+
+                    // Line State Position
+                    // The bar is vertical.
+                    // Y goes from (Bottom) to (Top)
+                    // Bottom y = graphOrigin.y
+                    // Top y = graphOrigin.y - barHeight
+                    // We map the full circle (2PI) to the full bar height
+                    const ly = graphOrigin.y - (angleNorm * barHeight); 
+                    const lx = graphX;
+
+                    // Interpolate
+                    const px = cx + (lx - cx) * t;
+                    const py = cy + (ly - cy) * t;
+                    
+                    points.push({x: px, y: py});
+                }
+
+                // Draw the strip
+                ctx.beginPath();
+                // We simulate thickness by drawing a thick line strip
+                ctx.lineWidth = (ringThick / maxRadius) * graphWidth * 0.9; // Scale thickness to graph
+                // Wait, thickness on circle is ringThick (pixels). Thickness on graph should match.
+                // Let's approximate thickness visually.
+                
+                // Actually, let's allow thickness to interpolate too.
+                // Circle thickness: ringThick. Graph thickness: (graphWidth/numRings).
+                const currentThick = ringThick; // Simplification
+                ctx.lineWidth = currentThick - 1; // Leave a tiny gap
+
+                // Draw the path
+                ctx.moveTo(points[0].x, points[0].y);
+                for(let p of points) ctx.lineTo(p.x, p.y);
+                ctx.stroke();
+                
+                // Optional: Dots at ends for "cutting" visual
+                if(t > 0.1 && t < 0.9) {
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath(); 
+                    ctx.arc(points[0].x, points[0].y, 2, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            }
+
+            // Draw Linear Graph Line (The 'Slope')
+            if (t > 0.8) {
+                ctx.globalAlpha = (t - 0.8) * 5;
+                ctx.strokeStyle = '#e11d48'; // Rose-600
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(graphOrigin.x, graphOrigin.y);
+                ctx.lineTo(graphOrigin.x + graphWidth, graphOrigin.y - graphHeight);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.globalAlpha = 1;
+                
+                // Label Area
+                ctx.fillStyle = '#e11d48';
+                ctx.fillText("y = 2πx", graphOrigin.x + graphWidth + 30, graphOrigin.y - graphHeight);
+            }
+        }
+
+        function loop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const dt = timestamp - lastTime;
+            lastTime = timestamp;
+
+            // State Machine
+            if (phase === 'circle') {
+                progress = 0;
+                holdTimer += dt;
+                if (holdTimer > 1000) {
+                    phase = 'unroll';
+                    holdTimer = 0;
+                    statusText.textContent = "Unrolling rings...";
+                }
+            } else if (phase === 'unroll') {
+                progress += dt / 2000; // 2 seconds to unroll
+                if (progress >= 1) {
+                    progress = 1;
+                    phase = 'hold';
+                    statusText.textContent = "Linear relation visible";
+                }
+            } else if (phase === 'hold') {
+                progress = 1;
+                holdTimer += dt;
+                if (holdTimer > holdTime) {
+                    phase = 'reset';
+                    holdTimer = 0;
+                    statusText.textContent = "Increasing resolution...";
+                }
+            } else if (phase === 'reset') {
+                // Fade out or instant snap? Let's instant snap next resolution
+                resIndex = (resIndex + 1) % resolutions.length;
+                numRings = resolutions[resIndex];
+                resDisplay.textContent = "N = " + numRings;
+                
+                phase = 'circle';
+                progress = 0;
+                statusText.textContent = "Ready to slice";
+            }
+
+            const eased = easeInOutCubic(progress);
+            drawScene(eased);
+
+            requestAnimationFrame(loop);
+        }
+
+        requestAnimationFrame(loop);
+
+    })();
+    </script>
+</body>
+</html>

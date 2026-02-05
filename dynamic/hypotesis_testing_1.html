@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hypothesis Testing Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f8fafc; }
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #4f46e5;
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden flex flex-col lg:flex-row">
+        
+        <!-- Controls Panel -->
+        <div class="w-full lg:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Hypothesis Testing</h1>
+                <p class="text-sm text-slate-500 mb-6">Confidence Interval View.</p>
+
+                <!-- Status Card -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6">
+                    <div class="mb-4">
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Target Mean (\(H_0\))</p>
+                        <p class="text-lg font-mono text-slate-700">50</p>
+                    </div>
+                    
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Your Sample Mean (\(\bar{x}\))</p>
+                        <p id="val-sample-mean" class="text-2xl font-mono font-bold text-blue-600">50.00</p>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="space-y-6">
+                    <!-- New Dist Button -->
+                    <button onclick="newDistribution()" class="w-full py-3 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition shadow-md flex items-center justify-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                        </svg>
+                        <span>Generate New Mystery Data</span>
+                    </button>
+
+                    <!-- Sample Size Slider -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-bold text-slate-700 text-sm">Sample Size (n)</label>
+                            <span id="val-n" class="font-mono text-indigo-600 font-bold">30</span>
+                        </div>
+                        <input type="range" id="slider-n" min="2" max="200" step="1" value="30">
+                        <p class="text-[10px] text-slate-400 mt-1">Increasing n narrows the confidence interval.</p>
+                    </div>
+                </div>
+
+                <!-- Result Box (Fixed Height) -->
+                <div id="result-box" class="mt-8 p-4 rounded-xl border-l-4 bg-slate-100 border-slate-300 transition-colors duration-300 h-32 flex flex-col justify-center">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold uppercase text-slate-500">P-Value</span>
+                        <span id="val-p" class="font-mono font-bold text-lg">0.500</span>
+                    </div>
+                    <div id="decision-text" class="text-sm font-bold text-slate-700">
+                        Calculating...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart Panel -->
+        <div class="w-full lg:w-2/3 p-6 bg-white relative flex items-center justify-center">
+            <div class="w-full h-[450px]">
+                <canvas id="hypoCanvas"></canvas>
+            </div>
+            
+            <!-- Legend Overlay -->
+            <div class="absolute top-4 right-4 bg-white/90 p-3 rounded-lg border border-slate-100 shadow text-xs space-y-2">
+                <div class="flex items-center"><span class="w-3 h-3 rounded-full bg-blue-400 mr-2"></span> Confidence Interval (95%)</div>
+                <div class="flex items-center"><span class="w-3 h-3 rounded-full bg-red-200 mr-2"></span> Unlikely Region</div>
+                <div class="flex items-center"><span class="w-1 h-4 bg-slate-600 mr-3 ml-1 border border-slate-200"></span> Target (50)</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        Chart.register(window['chartjs-plugin-annotation']);
+
+        const ctx = document.getElementById('hypoCanvas').getContext('2d');
+        const sN = document.getElementById('slider-n');
+        const vN = document.getElementById('val-n');
+        const vSampleMean = document.getElementById('val-sample-mean');
+        const vP = document.getElementById('val-p');
+        const resultBox = document.getElementById('result-box');
+        const decisionText = document.getElementById('decision-text');
+
+        // Logic State
+        let nullMean = 50;
+        let popStdDev = 15; // Fixed population standard deviation for simplicity
+        let trueMean = 50; // Hidden variable set by "New Dist"
+        let chart;
+
+        // Normal Distribution PDF
+        function normalPDF(x, mean, stdDev) {
+            return (1 / (stdDev * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * Math.pow((x - mean) / stdDev, 2));
+        }
+
+        // Standard Normal CDF (approx) for p-value
+        function normalCDF(z) {
+            return 0.5 * (1 + erf(z / Math.sqrt(2)));
+        }
+        
+        function erf(x) {
+            var a1 =  0.254829592;
+            var a2 = -0.284496736;
+            var a3 =  1.421413741;
+            var a4 = -1.453152027;
+            var a5 =  1.061405429;
+            var p  =  0.3275911;
+            var sign = 1;
+            if (x < 0) sign = -1;
+            x = Math.abs(x);
+            var t = 1.0/(1.0 + p*x);
+            var y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t*Math.exp(-x*x);
+            return sign*y;
+        }
+
+        function newDistribution() {
+            // Randomly set the true mean between 10 and 90
+            trueMean = 10 + Math.random() * 80;
+            
+            // Add a little randomness to the button click feel
+            resultBox.style.opacity = 0.5;
+            setTimeout(() => resultBox.style.opacity = 1, 200);
+            
+            update();
+        }
+
+        function update() {
+            const n = parseInt(sN.value);
+            vN.textContent = n;
+
+            // 1. Calculate Standard Error
+            const stdErr = popStdDev / Math.sqrt(n);
+
+            // 2. Simulate a Sample
+            // We only generate a NEW sample mean if we click new distribution?
+            // Actually, usually in these tools, sliding N keeps the "Truth" but re-samples.
+            // But to make the UI feel responsive and consistent, let's behave as if we assume
+            // the Sample Mean stays roughly where the truth is, but gets tighter?
+            // No, strictly speaking: new N = new Sample.
+            // To prevent jitter, let's keep the "z-score" of the random draw constant?
+            // No, let's just re-roll. It's lively.
+            
+            // Re-roll sample mean based on True Mean
+            // Standard Normal Random number
+            const u1 = Math.random();
+            const u2 = Math.random();
+            const zRand = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+            const sampleMean = trueMean + (stdErr * zRand);
+            
+            vSampleMean.textContent = sampleMean.toFixed(2);
+
+            // 3. Perform Hypothesis Test (Z-Test)
+            // H0: Mean = 50.
+            const zScore = (sampleMean - nullMean) / stdErr;
+            const pValue = 2 * (1 - normalCDF(Math.abs(zScore)));
+
+            vP.textContent = pValue < 0.001 ? "< 0.001" : pValue.toFixed(3);
+
+            // 4. Decision Logic
+            // Include fixed height classes in the logic update
+            const baseClasses = "mt-8 p-4 rounded-xl border-l-4 transition-colors duration-300 h-32 flex flex-col justify-center";
+            
+            if (pValue < 0.05) {
+                resultBox.className = `${baseClasses} bg-red-50 border-red-500`;
+                decisionText.innerHTML = `<span class="text-red-600">Reject \(H_0\)</span>. 50 is outside the confidence interval.`;
+            } else {
+                resultBox.className = `${baseClasses} bg-emerald-50 border-emerald-500`;
+                decisionText.innerHTML = `<span class="text-emerald-600">Fail to Reject \(H_0\)</span>. 50 is plausible.`;
+            }
+
+            // 5. Draw Chart
+            drawChart(stdErr, sampleMean);
+        }
+
+        function drawChart(stdErr, sampleMean) {
+            // FIXED: Fixed X Range from 10 to 100
+            const minX = 10;
+            const maxX = 100;
+            
+            // Generate Curve Data (Centered on SAMPLE MEAN now)
+            const labels = [];
+            const dataPoints = [];
+            const steps = 200;
+            
+            // 95% Confidence Interval Limits
+            const ciLeft = sampleMean - 1.96 * stdErr;
+            const ciRight = sampleMean + 1.96 * stdErr;
+
+            for (let i = 0; i <= steps; i++) {
+                const x = minX + (i / steps) * (maxX - minX);
+                labels.push(x.toFixed(1));
+                // PDF centered on sampleMean
+                dataPoints.push({x: x, y: normalPDF(x, sampleMean, stdErr)});
+            }
+            
+            if (!chart) {
+                chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Confidence Distribution',
+                            data: dataPoints,
+                            borderColor: '#3b82f6', // Blue
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true,
+                            segment: {
+                                backgroundColor: (ctx) => {
+                                    const x = ctx.p0.parsed.x;
+                                    // Highlight the tails (outside 95%) in Red to show rejection zones relative to Sample
+                                    if (x < ciLeft || x > ciRight) return 'rgba(254, 202, 202, 0.5)'; // Red Tail
+                                    return 'rgba(191, 219, 254, 0.4)'; // Blue Body (Confidence Interval)
+                                },
+                                borderColor: (ctx) => {
+                                    const x = ctx.p0.parsed.x;
+                                    if (x < ciLeft || x > ciRight) return '#f87171';
+                                    return '#3b82f6';
+                                }
+                            }
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 0 },
+                        layout: {
+                            padding: {
+                                top: 40, // Added padding to prevent label clipping
+                                left: 10,
+                                right: 10
+                            }
+                        },
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                min: minX,
+                                max: maxX,
+                                grid: { color: '#f1f5f9' },
+                                title: { display: true, text: 'Population Mean Value' }
+                            },
+                            y: { display: false }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            annotation: {
+                                clip: false, // Explicitly disable clipping for annotations
+                                annotations: {
+                                    sampleLine: {
+                                        type: 'line',
+                                        xMin: sampleMean,
+                                        xMax: sampleMean,
+                                        borderColor: '#2563eb', // Blue
+                                        borderWidth: 2,
+                                        borderDash: [2, 2],
+                                        label: {
+                                            display: true,
+                                            content: 'x̄',
+                                            backgroundColor: 'transparent',
+                                            color: '#1e40af',
+                                            position: 'start',
+                                            yAdjust: -10
+                                        }
+                                    },
+                                    nullLine: {
+                                        type: 'line',
+                                        xMin: 50,
+                                        xMax: 50,
+                                        borderColor: '#475569', // Slate-600
+                                        borderWidth: 3,
+                                        drawTime: 'afterDatasetsDraw', // Ensure drawn on top
+                                        label: {
+                                            display: true,
+                                            content: 'Target (50)',
+                                            backgroundColor: '#475569',
+                                            color: 'white',
+                                            position: 'end',
+                                            yAdjust: -20
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                chart.data.datasets[0].data = dataPoints;
+                
+                // Update Coloring (CI)
+                chart.data.datasets[0].segment.backgroundColor = (ctx) => {
+                    const x = ctx.p0.parsed.x;
+                    if (x < ciLeft || x > ciRight) return 'rgba(254, 202, 202, 0.6)';
+                    return 'rgba(191, 219, 254, 0.5)';
+                };
+                chart.data.datasets[0].segment.borderColor = (ctx) => {
+                    const x = ctx.p0.parsed.x;
+                    if (x < ciLeft || x > ciRight) return '#f87171';
+                    return '#3b82f6';
+                };
+
+                // Update Annotations
+                chart.options.plugins.annotation.annotations.sampleLine.xMin = sampleMean;
+                chart.options.plugins.annotation.annotations.sampleLine.xMax = sampleMean;
+
+                chart.update();
+            }
+        }
+
+        sN.addEventListener('input', update);
+        
+        // Initial Draw
+        newDistribution(); 
+    </script>
+</body>
+</html>

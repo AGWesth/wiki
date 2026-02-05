@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Least Squares Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+        canvas {
+            cursor: crosshair;
+            touch-action: none; /* Critical for touch devices */
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden flex flex-col md:flex-row">
+        
+        <!-- Info Panel -->
+        <div class="w-full md:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Least Squares Fit</h1>
+                <p class="text-sm text-slate-500 mb-6">Ordinary Least Squares (OLS) Regression.</p>
+
+                <!-- Status -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold text-slate-400 uppercase">Points</span>
+                        <span id="point-count" class="text-lg font-bold text-indigo-600">0 / 10</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2">
+                        <div id="progress-bar" class="bg-indigo-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                    <p id="instruction-text" class="text-xs text-slate-400 mt-2 italic">Click grid to add a point.</p>
+                </div>
+
+                <!-- Equation Display -->
+                <div class="space-y-4">
+                    <div class="bg-slate-800 text-white p-4 rounded-lg shadow-md">
+                        <p class="text-xs text-slate-400 uppercase font-bold mb-1">Regression Line</p>
+                        <div id="eq-display" class="text-lg font-mono text-emerald-400">
+                            Waiting for data...
+                        </div>
+                    </div>
+
+                    <div class="bg-rose-50 border border-rose-100 p-4 rounded-lg">
+                        <p class="text-xs text-rose-400 uppercase font-bold mb-1">Error (SSE)</p>
+                        <div id="sse-display" class="text-lg font-mono text-rose-600 font-bold">
+                            0.00
+                        </div>
+                        <p class="text-[10px] text-rose-400 mt-1">Sum of Squared Residuals</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Teaching Note -->
+            <div class="mt-auto pt-6 border-t border-slate-200">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Core Principle</h3>
+                <p class="text-xs text-slate-600 leading-relaxed">
+                    The algorithm finds the specific line \( y = mx + b \) that minimizes the sum of the <span class="text-rose-500 font-bold">squared vertical distances</span> (residuals) between the points and the line.
+                </p>
+            </div>
+        </div>
+
+        <!-- Canvas Panel -->
+        <div class="w-full md:w-2/3 p-4 bg-white relative flex items-center justify-center bg-grid-slate-100 min-h-[400px]">
+            <canvas id="regCanvas" width="800" height="600" class="w-full h-auto rounded-lg shadow-inner bg-slate-50 border border-slate-200"></canvas>
+            
+            <!-- Reset Overlay (Hidden by default) -->
+            <div id="reset-overlay" class="absolute inset-0 bg-slate-900/10 backdrop-blur-[1px] flex items-center justify-center pointer-events-none opacity-0 transition-opacity duration-300">
+                <div class="bg-white px-6 py-3 rounded-full shadow-xl font-bold text-slate-700 animate-bounce">
+                    Click anywhere to Reset
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const canvas = document.getElementById('regCanvas');
+        const ctx = canvas.getContext('2d');
+        const pointCount = document.getElementById('point-count');
+        const progressBar = document.getElementById('progress-bar');
+        const eqDisplay = document.getElementById('eq-display');
+        const sseDisplay = document.getElementById('sse-display');
+        const instruction = document.getElementById('instruction-text');
+        const resetOverlay = document.getElementById('reset-overlay');
+
+        // State
+        let points = []; // Array of {x, y} in normalized logic coords (0-100)
+        const maxPoints = 10;
+        let isComplete = false;
+
+        // Visual Config
+        const padding = 40;
+        
+        function resize() {
+            // Ensure internal resolution matches display size for sharp drawing
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+            render();
+        }
+        window.addEventListener('resize', resize);
+
+        // --- Coordinate Helpers ---
+        // Logic: x=[0, 100], y=[0, 100]
+        function toCanvas(p) {
+            const w = canvas.width - 2*padding;
+            const h = canvas.height - 2*padding;
+            return {
+                x: padding + (p.x / 100) * w,
+                y: canvas.height - padding - (p.y / 100) * h // Flip Y
+            };
+        }
+
+        function fromCanvas(x, y) {
+            const w = canvas.width - 2*padding;
+            const h = canvas.height - 2*padding;
+            return {
+                x: ((x - padding) / w) * 100,
+                y: ((canvas.height - padding - y) / h) * 100
+            };
+        }
+
+        // --- Math ---
+        function calculateRegression() {
+            if (points.length < 2) return null;
+
+            let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+            const n = points.length;
+
+            for (let p of points) {
+                sumX += p.x;
+                sumY += p.y;
+                sumXY += (p.x * p.y);
+                sumXX += (p.x * p.x);
+            }
+
+            // Denominator check to avoid division by zero (all x same)
+            const denom = (n * sumXX - sumX * sumX);
+            if (Math.abs(denom) < 0.0001) return null; 
+
+            // OLS Formulas
+            const m = (n * sumXY - sumX * sumY) / denom;
+            const b = (sumY - m * sumX) / n;
+
+            // Calculate SSE
+            let sse = 0;
+            for (let p of points) {
+                const predictedY = m * p.x + b;
+                const residual = p.y - predictedY;
+                sse += residual * residual;
+            }
+
+            return { m, b, sse };
+        }
+
+        // --- Drawing ---
+        function drawGrid() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Axes
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+            
+            // Y Axis
+            const origin = toCanvas({x: 0, y: 0});
+            const top = toCanvas({x: 0, y: 100});
+            const right = toCanvas({x: 100, y: 0});
+
+            ctx.beginPath();
+            ctx.moveTo(origin.x, origin.y);
+            ctx.lineTo(origin.x, top.y);
+            ctx.moveTo(origin.x, origin.y);
+            ctx.lineTo(right.x, right.y);
+            ctx.stroke();
+        }
+
+        function render() {
+            drawGrid();
+
+            const reg = calculateRegression();
+
+            // 1. Draw Line
+            if (reg) {
+                // Determine line segment to draw (clipped to 0-100 x range)
+                const start = toCanvas({x: 0, y: reg.b});
+                const end = toCanvas({x: 100, y: reg.m * 100 + reg.b});
+
+                ctx.beginPath();
+                ctx.strokeStyle = '#10b981'; // Emerald-500
+                ctx.lineWidth = 3;
+                ctx.moveTo(start.x, start.y);
+                ctx.lineTo(end.x, end.y);
+                ctx.stroke();
+            }
+
+            // 2. Draw Points & Residuals
+            points.forEach(p => {
+                const pos = toCanvas(p);
+
+                if (reg) {
+                    // Draw Residual (Vertical line to regression line)
+                    const predictedY = reg.m * p.x + reg.b;
+                    const linePos = toCanvas({x: p.x, y: predictedY});
+
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#f43f5e'; // Rose-500
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([4, 4]);
+                    ctx.moveTo(pos.x, pos.y);
+                    ctx.lineTo(linePos.x, linePos.y);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
+                // Draw Point
+                ctx.beginPath();
+                ctx.fillStyle = '#4f46e5'; // Indigo-600
+                ctx.arc(pos.x, pos.y, 6, 0, Math.PI*2);
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+
+            // Update UI
+            updateUI(reg);
+        }
+
+        function updateUI(reg) {
+            pointCount.textContent = `${points.length} / ${maxPoints}`;
+            progressBar.style.width = `${(points.length / maxPoints) * 100}%`;
+
+            if (reg) {
+                const bSign = reg.b >= 0 ? '+' : '-';
+                // Latex format
+                eqDisplay.innerHTML = `\\[ y = ${reg.m.toFixed(2)}x ${bSign} ${Math.abs(reg.b).toFixed(2)} \\]`;
+                if(window.MathJax && window.MathJax.typesetPromise) {
+                    MathJax.typesetPromise([eqDisplay]).catch(() => {});
+                }
+                sseDisplay.textContent = reg.sse.toFixed(2);
+            } else {
+                eqDisplay.textContent = "Add at least 2 points...";
+                sseDisplay.textContent = "0.00";
+            }
+
+            if (isComplete) {
+                instruction.textContent = "Limit reached. Click to reset.";
+                resetOverlay.style.opacity = 1;
+            } else {
+                instruction.textContent = "Click grid to add a point.";
+                resetOverlay.style.opacity = 0;
+            }
+        }
+
+        // --- Interactions ---
+        // Use pointerdown for broad support (Mouse + Touch)
+        canvas.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); // Prevent scrolling on touch
+
+            if (isComplete) {
+                // Reset
+                points = [];
+                isComplete = false;
+                render();
+                return;
+            }
+
+            // Use offsetX/Y for reliable coordinates relative to the element
+            const x = e.offsetX;
+            const y = e.offsetY;
+
+            // Convert to logic coords
+            const p = fromCanvas(x, y);
+            
+            // Allow clicking slightly outside logic bounds for better UX, clamp them
+            p.x = Math.max(0, Math.min(100, p.x));
+            p.y = Math.max(0, Math.min(100, p.y));
+
+            points.push(p);
+
+            if (points.length >= maxPoints) {
+                isComplete = true;
+            }
+
+            render();
+        });
+
+        // Initial
+        resize();
+
+    })();
+    </script>
+</body>
+</html>

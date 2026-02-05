@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Law of Large Numbers Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f8fafc; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-5xl overflow-hidden flex flex-col lg:flex-row border border-slate-100">
+        
+        <!-- Controls Panel -->
+        <div class="w-full l<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Law of Large Numbers Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f8fafc; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-5xl overflow-hidden flex flex-col lg:flex-row border border-slate-100">
+        
+        <!-- Controls Panel -->
+        <div class="w-full lg:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Law of Large Numbers</h1>
+                <p class="text-sm text-slate-500 mb-6">Running Mean vs. Sample Size.</p>
+
+                <!-- Status Card -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 mb-8">
+                    <div class="mb-4">
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">True Mean (The Target)</p>
+                        <p id="val-true-mean" class="text-2xl font-mono font-bold text-emerald-600">--</p>
+                    </div>
+                    
+                    <div class="flex justify-between items-end">
+                        <div>
+                            <p class="text-xs font-bold text-slate-400 uppercase mb-1">Current Sample Mean</p>
+                            <p id="val-current-mean" class="text-xl font-mono font-bold text-blue-600">--</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs font-bold text-slate-400 uppercase mb-1">Samples (n)</p>
+                            <p id="val-n" class="text-xl font-mono font-bold text-slate-700">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <button onclick="generateNewData()" class="w-full py-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition shadow-lg flex items-center justify-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                    </svg>
+                    <span>Generate Mystery Data</span>
+                </button>
+            </div>
+
+            <!-- Insight -->
+            <div class="mt-8 pt-6 border-t border-slate-200">
+                <p class="text-xs text-slate-500 italic">
+                    "High variance makes the initial path chaotic, but mathematically, it MUST eventually settle on the True Mean."
+                </p>
+            </div>
+        </div>
+
+        <!-- Chart Panel -->
+        <div class="w-full lg:w-2/3 p-6 bg-white relative flex items-center justify-center">
+            <div class="w-full h-[500px]">
+                <canvas id="llnCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        Chart.register(window['chartjs-plugin-annotation']);
+
+        const ctx = document.getElementById('llnCanvas').getContext('2d');
+        const vTrue = document.getElementById('val-true-mean');
+        const vCurr = document.getElementById('val-current-mean');
+        const vN = document.getElementById('val-n');
+
+        // Logic State
+        let trueMean = 5; // Initial mean within new range
+        let stdDev = 5;   // Increased variance for dramatic swings
+        let currentN = 0;
+        let runningSum = 0;
+        let dataPoints = [];
+        let labels = [];
+        let chart;
+        let animationFrame;
+        let isPaused = false;
+
+        const MAX_SAMPLES = 1000;
+        const SPEED = 5; // Points per frame
+
+        // Gaussian Random (Box-Muller)
+        function randn_bm() {
+            let u = 0, v = 0;
+            while(u === 0) u = Math.random(); 
+            while(v === 0) v = Math.random();
+            return Math.sqrt( -2.0 * Math.log( u ) ) * Math.cos( 2.0 * Math.PI * v );
+        }
+
+        function generateNewData() {
+            // Pick a random Mean between 1 and 10
+            trueMean = 1 + Math.random() * 9;
+            vTrue.textContent = trueMean.toFixed(2);
+            
+            // INCREASED VARIANCE: Range 3 to 8
+            // This ensures the "swings" are visible and often hit the chart edges
+            stdDev = 3 + Math.random() * 5;
+
+            resetAnimation();
+        }
+
+        function resetAnimation() {
+            // Reset state
+            currentN = 0;
+            runningSum = 0;
+            dataPoints = [];
+            labels = [];
+            
+            // Update chart structure immediately
+            if (chart) {
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = dataPoints;
+                
+                // Update Target Line
+                chart.options.plugins.annotation.annotations.trueLine.yMin = trueMean;
+                chart.options.plugins.annotation.annotations.trueLine.yMax = trueMean;
+                
+                chart.update();
+            } else {
+                initChart();
+            }
+
+            // Cancel any existing loop
+            if (animationFrame) cancelAnimationFrame(animationFrame);
+            isPaused = false;
+            
+            // Start Loop
+            loop();
+        }
+
+        function loop() {
+            if (isPaused) return;
+
+            // Add a batch of points for speed
+            for (let i = 0; i < SPEED; i++) {
+                if (currentN >= MAX_SAMPLES) {
+                    // Loop Finished -> Pause then Restart
+                    isPaused = true;
+                    setTimeout(() => {
+                        resetAnimation();
+                    }, 2000); // 2 second pause
+                    break;
+                }
+
+                currentN++;
+                
+                // Draw Sample
+                const sample = trueMean + randn_bm() * stdDev;
+                runningSum += sample;
+                const currentMean = runningSum / currentN;
+
+                dataPoints.push(currentMean);
+                labels.push(currentN);
+            }
+
+            // Update UI
+            vN.textContent = currentN;
+            if (dataPoints.length > 0) {
+                vCurr.textContent = dataPoints[dataPoints.length - 1].toFixed(2);
+            }
+
+            // Update Chart
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = dataPoints;
+            chart.update('none'); // 'none' mode prevents internal Chart.js animation for performance
+
+            if (!isPaused) {
+                animationFrame = requestAnimationFrame(loop);
+            }
+        }
+
+        function initChart() {
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Running Mean',
+                        data: [],
+                        borderColor: '#2563eb', // Blue-600
+                        borderWidth: 2,
+                        pointRadius: 0, // Hide points for clean line
+                        fill: false,
+                        tension: 0.1 // Slight curve
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false, // We handle animation manually
+                    layout: {
+                        padding: {
+                            top: 20, right: 20, bottom: 0, left: 0
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            min: 0,
+                            max: MAX_SAMPLES,
+                            title: { display: true, text: 'Number of Samples (n)' },
+                            grid: { color: '#f1f5f9' }
+                        },
+                        y: {
+                            min: 0,
+                            max: 15,
+                            title: { display: true, text: 'Average Value' }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        annotation: {
+                            annotations: {
+                                trueLine: {
+                                    type: 'line',
+                                    yMin: trueMean,
+                                    yMax: trueMean,
+                                    borderColor: '#059669', // Emerald-600
+                                    borderWidth: 3,
+                                    borderDash: [5, 5],
+                                    label: {
+                                        display: true,
+                                        content: 'True Mean',
+                                        backgroundColor: '#059669',
+                                        color: 'white',
+                                        position: 'start',
+                                        xAdjust: 10,
+                                        yAdjust: -10
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Init
+        generateNewData();
+
+    </script>
+</body>
+</html>g:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Law of Large Numbers</h1>
+                <p class="text-sm text-slate-500 mb-6">Running Mean vs. Sample Size.</p>
+
+                <!-- Status Card -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 mb-8">
+                    <div class="mb-4">
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">True Mean (The Target)</p>
+                        <p id="val-true-mean" class="text-2xl font-mono font-bold text-emerald-600">--</p>
+                    </div>
+                    
+                    <div class="flex justify-between items-end">
+                        <div>
+                            <p class="text-xs font-bold text-slate-400 uppercase mb-1">Current Sample Mean</p>
+                            <p id="val-current-mean" class="text-xl font-mono font-bold text-blue-600">--</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs font-bold text-slate-400 uppercase mb-1">Samples (n)</p>
+                            <p id="val-n" class="text-xl font-mono font-bold text-slate-700">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <button onclick="generateNewData()" class="w-full py-4 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition shadow-lg flex items-center justify-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                    </svg>
+                    <span>Generate Mystery Data</span>
+                </button>
+            </div>
+
+            <!-- Insight -->
+            <div class="mt-8 pt-6 border-t border-slate-200">
+                <p class="text-xs text-slate-500 italic">
+                    "High variance makes the initial path chaotic, but mathematically, it MUST eventually settle on the True Mean."
+                </p>
+            </div>
+        </div>
+
+        <!-- Chart Panel -->
+        <div class="w-full lg:w-2/3 p-6 bg-white relative flex items-center justify-center">
+            <div class="w-full h-[500px]">
+                <canvas id="llnCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        Chart.register(window['chartjs-plugin-annotation']);
+
+        const ctx = document.getElementById('llnCanvas').getContext('2d');
+        const vTrue = document.getElementById('val-true-mean');
+        const vCurr = document.getElementById('val-current-mean');
+        const vN = document.getElementById('val-n');
+
+        // Logic State
+        let trueMean = 5; // Initial mean within new range
+        let stdDev = 5;   // Increased variance for dramatic swings
+        let currentN = 0;
+        let runningSum = 0;
+        let dataPoints = [];
+        let labels = [];
+        let chart;
+        let animationFrame;
+        let isPaused = false;
+
+        const MAX_SAMPLES = 1000;
+        const SPEED = 5; // Points per frame
+
+        // Gaussian Random (Box-Muller)
+        function randn_bm() {
+            let u = 0, v = 0;
+            while(u === 0) u = Math.random(); 
+            while(v === 0) v = Math.random();
+            return Math.sqrt( -2.0 * Math.log( u ) ) * Math.cos( 2.0 * Math.PI * v );
+        }
+
+        function generateNewData() {
+            // Pick a random Mean between 1 and 10
+            trueMean = 1 + Math.random() * 9;
+            vTrue.textContent = trueMean.toFixed(2);
+            
+            // INCREASED VARIANCE: Range 3 to 8
+            // This ensures the "swings" are visible and often hit the chart edges
+            stdDev = 3 + Math.random() * 5;
+
+            resetAnimation();
+        }
+
+        function resetAnimation() {
+            // Reset state
+            currentN = 0;
+            runningSum = 0;
+            dataPoints = [];
+            labels = [];
+            
+            // Update chart structure immediately
+            if (chart) {
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = dataPoints;
+                
+                // Update Target Line
+                chart.options.plugins.annotation.annotations.trueLine.yMin = trueMean;
+                chart.options.plugins.annotation.annotations.trueLine.yMax = trueMean;
+                
+                chart.update();
+            } else {
+                initChart();
+            }
+
+            // Cancel any existing loop
+            if (animationFrame) cancelAnimationFrame(animationFrame);
+            isPaused = false;
+            
+            // Start Loop
+            loop();
+        }
+
+        function loop() {
+            if (isPaused) return;
+
+            // Add a batch of points for speed
+            for (let i = 0; i < SPEED; i++) {
+                if (currentN >= MAX_SAMPLES) {
+                    // Loop Finished -> Pause then Restart
+                    isPaused = true;
+                    setTimeout(() => {
+                        resetAnimation();
+                    }, 2000); // 2 second pause
+                    break;
+                }
+
+                currentN++;
+                
+                // Draw Sample
+                const sample = trueMean + randn_bm() * stdDev;
+                runningSum += sample;
+                const currentMean = runningSum / currentN;
+
+                dataPoints.push(currentMean);
+                labels.push(currentN);
+            }
+
+            // Update UI
+            vN.textContent = currentN;
+            if (dataPoints.length > 0) {
+                vCurr.textContent = dataPoints[dataPoints.length - 1].toFixed(2);
+            }
+
+            // Update Chart
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = dataPoints;
+            chart.update('none'); // 'none' mode prevents internal Chart.js animation for performance
+
+            if (!isPaused) {
+                animationFrame = requestAnimationFrame(loop);
+            }
+        }
+
+        function initChart() {
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Running Mean',
+                        data: [],
+                        borderColor: '#2563eb', // Blue-600
+                        borderWidth: 2,
+                        pointRadius: 0, // Hide points for clean line
+                        fill: false,
+                        tension: 0.1 // Slight curve
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false, // We handle animation manually
+                    layout: {
+                        padding: {
+                            top: 20, right: 20, bottom: 0, left: 0
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            min: 0,
+                            max: MAX_SAMPLES,
+                            title: { display: true, text: 'Number of Samples (n)' },
+                            grid: { color: '#f1f5f9' }
+                        },
+                        y: {
+                            min: 0,
+                            max: 15,
+                            title: { display: true, text: 'Average Value' }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        annotation: {
+                            annotations: {
+                                trueLine: {
+                                    type: 'line',
+                                    yMin: trueMean,
+                                    yMax: trueMean,
+                                    borderColor: '#059669', // Emerald-600
+                                    borderWidth: 3,
+                                    borderDash: [5, 5],
+                                    label: {
+                                        display: true,
+                                        content: 'True Mean',
+                                        backgroundColor: '#059669',
+                                        color: 'white',
+                                        position: 'start',
+                                        xAdjust: 10,
+                                        yAdjust: -10
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Init
+        generateNewData();
+
+    </script>
+</body>
+</html>

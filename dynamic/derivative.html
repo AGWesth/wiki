@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Derivative Explorer: Definition of the Derivative</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+        canvas {
+            cursor: pointer;
+            touch-action: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden flex flex-col md:flex-row">
+        
+        <!-- Controls & Math Panel -->
+        <div class="w-full md:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Derivative Explorer</h1>
+                <p class="text-sm text-slate-500 mb-6">From Secant to Tangent.<br>The limit as \( h \to 0 \).</p>
+
+                <!-- Function Display -->
+                <div class="bg-slate-800 text-white p-3 rounded-lg shadow-md text-center mb-6">
+                    <p class="text-xs text-slate-400 uppercase font-bold mb-1">Function</p>
+                    <div class="text-lg font-mono">
+                        \[ f(x) = 0.5 e^{0.5x} \]
+                    </div>
+                </div>
+
+                <!-- Sliders -->
+                <div class="space-y-6 mb-8">
+                    <!-- X Slider -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-bold text-slate-700 text-sm">Point x</label>
+                            <span id="val-x" class="text-slate-600 font-mono text-sm">1.00</span>
+                        </div>
+                        <input type="range" id="slider-x" min="-4" max="4" step="0.1" value="1.0" 
+                               class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-600">
+                    </div>
+
+                    <!-- H Slider -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-bold text-blue-600 text-sm">Step Size (h)</label>
+                            <span id="val-h" class="text-blue-600 font-mono text-sm">2.00</span>
+                        </div>
+                        <input type="range" id="slider-h" min="0.01" max="3" step="0.01" value="2.0" 
+                               class="w-full h-2 bg-blue-100 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                        <div class="flex justify-end mt-2">
+                            <button id="btn-animate" class="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded hover:bg-blue-200 transition font-semibold">
+                                Animate h &to; 0
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Math Calculation Box -->
+                <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+                    <p class="text-xs text-slate-400 uppercase font-bold text-center border-b pb-2">Slope Calculation</p>
+                    
+                    <!-- Secant Slope -->
+                    <div class="flex justify-between items-center">
+                        <div class="text-sm text-blue-600 font-bold">
+                            Secant Slope<br>
+                            <span class="text-[10px] font-normal text-slate-500">\(\frac{f(x+h)-f(x)}{h}\)</span>
+                        </div>
+                        <div id="calc-secant" class="font-mono text-blue-700 text-lg">0.00</div>
+                    </div>
+
+                    <!-- Tangent Slope -->
+                    <div class="flex justify-between items-center pt-2 border-t border-slate-100">
+                        <div class="text-sm text-rose-600 font-bold">
+                            Actual Derivative<br>
+                            <span class="text-[10px] font-normal text-slate-500">\(f'(x)\)</span>
+                        </div>
+                        <div id="calc-tangent" class="font-mono text-rose-700 text-lg">0.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Teaching Note -->
+            <div class="mt-auto pt-6 border-t border-slate-200">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Key Concept</h3>
+                <p class="text-xs text-slate-600 leading-relaxed">
+                    The derivative is simply the slope of the <span class="text-blue-600 font-bold">secant line</span> when the two points get infinitely close together.
+                </p>
+            </div>
+        </div>
+
+        <!-- Canvas Panel -->
+        <div class="w-full md:w-2/3 p-4 bg-white relative flex items-center justify-center bg-grid-slate-100">
+            <canvas id="derivCanvas" width="800" height="600" class="w-full h-auto rounded-lg shadow-inner bg-slate-50 border border-slate-200"></canvas>
+            
+            <!-- Zoom Label -->
+            <div class="absolute bottom-6 right-6 text-xs text-slate-400 bg-white/80 px-2 py-1 rounded">
+                Scroll to Zoom (Y-axis)
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const canvas = document.getElementById('derivCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // UI Elements
+        const sliderX = document.getElementById('slider-x');
+        const sliderH = document.getElementById('slider-h');
+        const valX = document.getElementById('val-x');
+        const valH = document.getElementById('val-h');
+        const calcSecant = document.getElementById('calc-secant');
+        const calcTangent = document.getElementById('calc-tangent');
+        const btnAnimate = document.getElementById('btn-animate');
+
+        // State
+        let xVal = 1.0;
+        let hVal = 2.0;
+        let scaleX = 60; // Pixels per unit X
+        let scaleY = 60; // Pixels per unit Y
+        let origin = { x: canvas.width / 2, y: canvas.height - 100 }; // Origin position
+
+        // Function: f(x) = 0.5 * e^(0.5x)
+        function f(x) {
+            return 0.5 * Math.exp(0.5 * x);
+        }
+
+        // Derivative: f'(x) = 0.25 * e^(0.5x)
+        function df(x) {
+            return 0.25 * Math.exp(0.5 * x);
+        }
+
+        // --- Drawing Helpers ---
+
+        function toCanvas(x, y) {
+            return {
+                x: origin.x + (x * scaleX),
+                y: origin.y - (y * scaleY) // Inverted Y
+            };
+        }
+
+        function drawLine(p1, p2, color, width=2, dashed=false) {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            if(dashed) ctx.setLineDash([5, 5]);
+            else ctx.setLineDash([]);
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        function drawPoint(p, color, radius=4) {
+            ctx.beginPath();
+            ctx.fillStyle = color;
+            ctx.arc(p.x, p.y, radius, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        function drawText(str, p, color, align='center', base='middle', font='12px sans-serif') {
+            ctx.fillStyle = color;
+            ctx.font = font;
+            ctx.textAlign = align;
+            ctx.textBaseline = base;
+            ctx.fillText(str, p.x, p.y);
+        }
+
+        function drawAxes() {
+            ctx.strokeStyle = '#cbd5e1'; // slate-300
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            
+            // X Axis
+            ctx.moveTo(0, origin.y);
+            ctx.lineTo(canvas.width, origin.y);
+            
+            // Y Axis
+            ctx.moveTo(origin.x, 0);
+            ctx.lineTo(origin.x, canvas.height);
+            ctx.stroke();
+
+            // Ticks X
+            ctx.fillStyle = '#94a3b8';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            for(let i = -10; i <= 10; i++) {
+                if(i===0) continue;
+                let pos = toCanvas(i, 0);
+                ctx.fillRect(pos.x, pos.y - 3, 1, 6);
+                ctx.fillText(i, pos.x, pos.y + 5);
+            }
+
+            // Ticks Y
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            for(let i = -10; i <= 20; i++) {
+                if(i===0) continue;
+                let pos = toCanvas(0, i);
+                ctx.fillRect(pos.x - 3, pos.y, 6, 1);
+                ctx.fillText(i, pos.x - 5, pos.y);
+            }
+        }
+
+        function drawCurve() {
+            ctx.beginPath();
+            ctx.strokeStyle = '#1e293b'; // slate-800
+            ctx.lineWidth = 3;
+            
+            // Draw segment by segment
+            let startX = -10;
+            let endX = 10;
+            let step = 0.1;
+
+            let first = true;
+            for(let cx = startX; cx <= endX; cx += step) {
+                let cy = f(cx);
+                let pos = toCanvas(cx, cy);
+                if(first) {
+                    ctx.moveTo(pos.x, pos.y);
+                    first = false;
+                } else {
+                    ctx.lineTo(pos.x, pos.y);
+                }
+            }
+            ctx.stroke();
+        }
+
+        function render() {
+            // Clear
+            ctx.fillStyle = '#f8fafc'; // slate-50
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            drawAxes();
+            drawCurve();
+
+            // --- Math Logic ---
+            const y1 = f(xVal);
+            const x2 = xVal + hVal;
+            const y2 = f(x2);
+
+            const p1 = toCanvas(xVal, y1);
+            const p2 = toCanvas(x2, y2);
+            const pCorner = toCanvas(x2, y1); // For the triangle
+
+            // 1. Draw Secant Line (Blue)
+            // We extend it a bit to look like a line, not just a segment
+            // Slope m = (y2 - y1) / hVal
+            const secSlope = (y2 - y1) / hVal;
+            
+            // Visual Extension logic
+            const extLen = 100; // pixels
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y; // Canvas Y direction!
+            const angle = Math.atan2(dy, dx);
+            
+            const startLine = {
+                x: p1.x - Math.cos(angle) * extLen,
+                y: p1.y - Math.sin(angle) * extLen
+            };
+            const endLine = {
+                x: p2.x + Math.cos(angle) * extLen,
+                y: p2.y + Math.sin(angle) * extLen
+            };
+
+            drawLine(startLine, endLine, '#3b82f6', 2); // Blue-500
+
+            // 2. Draw Tangent Line (Red, Faint if h is large, Strong if h is small)
+            const tanSlope = df(xVal);
+            // Tangent equation: y - y1 = m(x - x1)
+            // Draw a fixed length line centered at p1
+            const tanAngle = Math.atan2(-(tanSlope * scaleY), (1 * scaleX)); // Note Y flip for canvas
+            const tanLen = 300;
+            const tStart = {
+                x: p1.x - Math.cos(tanAngle) * tanLen,
+                y: p1.y - Math.sin(tanAngle) * tanLen
+            };
+            const tEnd = {
+                x: p1.x + Math.cos(tanAngle) * tanLen,
+                y: p1.y + Math.sin(tanAngle) * tanLen
+            };
+            
+            // Opacity increases as h gets smaller
+            const opacity = Math.max(0.2, 1 - (hVal / 3));
+            ctx.save();
+            ctx.globalAlpha = opacity;
+            drawLine(tStart, tEnd, '#e11d48', 2, true); // Rose-600 dashed
+            ctx.restore();
+
+
+            // 3. Draw The "Rise over Run" Triangle
+            // Run (Horizontal)
+            drawLine(p1, pCorner, '#94a3b8', 1, true); 
+            // Rise (Vertical)
+            drawLine(pCorner, p2, '#94a3b8', 1, true);
+
+            // Labels for h and difference
+            if(hVal > 0.2) {
+                drawText("h", {x: (p1.x + p2.x)/2, y: p1.y + 15}, '#64748b');
+                drawText("Δy", {x: p2.x + 15, y: (p1.y + p2.y)/2}, '#64748b', 'left');
+            }
+
+
+            // 4. Draw Points
+            drawPoint(p1, '#e11d48', 5); // Main Point (Red)
+            drawPoint(p2, '#3b82f6', 5); // Secant Point (Blue)
+
+            // Labels
+            drawText("x", {x: p1.x, y: p1.y - 15}, '#e11d48', 'center', 'bottom', 'bold 14px sans-serif');
+            drawText("x+h", {x: p2.x, y: p2.y - 15}, '#3b82f6', 'center', 'bottom', 'bold 14px sans-serif');
+
+            // --- Update DOM ---
+            valX.textContent = xVal.toFixed(2);
+            valH.textContent = hVal.toFixed(3);
+            calcSecant.textContent = secSlope.toFixed(4);
+            calcTangent.textContent = tanSlope.toFixed(4);
+        }
+
+        // --- Interaction ---
+
+        function update() {
+            xVal = parseFloat(sliderX.value);
+            hVal = parseFloat(sliderH.value);
+            render();
+        }
+
+        sliderX.addEventListener('input', update);
+        sliderH.addEventListener('input', update);
+
+        // Animation
+        let animFrame;
+        btnAnimate.addEventListener('click', () => {
+            // Reset to high h if it's already low
+            if (hVal < 0.1) {
+                hVal = 2.0;
+                sliderH.value = 2.0;
+            }
+
+            function step() {
+                hVal = hVal * 0.95; // Decay
+                if (hVal < 0.01) {
+                    hVal = 0.01;
+                    sliderH.value = hVal;
+                    render();
+                    return; // Stop
+                }
+                sliderH.value = hVal;
+                render();
+                animFrame = requestAnimationFrame(step);
+            }
+            cancelAnimationFrame(animFrame);
+            step();
+        });
+
+        // Initial
+        render();
+
+    })();
+    </script>
+</body>
+</html>

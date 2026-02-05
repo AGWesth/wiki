@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vial Production Line</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #ffffff; /* Pure white background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        canvas {
+            /* Removed borders and shadows for a seamless look */
+            background-color: #ffffff; 
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="vialCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('vialCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // --- Configuration ---
+    let canvasWidth = window.innerWidth * 0.8;
+    let canvasHeight = 250;
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+
+    const SETTINGS = {
+        speed: 2,          // Production line speed
+        beltY: 200,        // Y position of the conveyor belt surface
+        vialGap: 100,      // Distance between vials
+        vialWidth: 45,
+        vialHeight: 75
+    };
+
+    // Handle resizing
+    window.addEventListener('resize', () => {
+        canvasWidth = window.innerWidth * 0.8;
+        canvas.width = canvasWidth;
+        initProductionLine();
+    });
+
+    // --- Conveyor Belt System ---
+    class ConveyorBelt {
+        constructor() {
+            this.offset = 0;
+            this.height = 20;
+        }
+
+        update() {
+            // Move texture offset to simulate running belt
+            this.offset -= SETTINGS.speed;
+            if (this.offset <= -40) { // Reset pattern
+                this.offset = 0;
+            }
+        }
+
+        draw(ctx) {
+            // 1. Draw the main belt body
+            ctx.fillStyle = '#4a5568'; // Dark rubber color
+            ctx.fillRect(0, SETTINGS.beltY, canvasWidth, this.height);
+            
+            // 2. Draw metallic rail/edge top
+            ctx.fillStyle = '#718096';
+            ctx.fillRect(0, SETTINGS.beltY, canvasWidth, 4);
+
+            // 3. Draw moving pattern (stripes) on the side to show motion
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, SETTINGS.beltY + 4, canvasWidth, this.height - 4);
+            ctx.clip(); // Clip drawing to the belt area
+
+            ctx.strokeStyle = '#2d3748';
+            ctx.lineWidth = 2;
+            
+            // Draw diagonal lines
+            for (let i = this.offset; i < canvasWidth + 40; i += 40) {
+                ctx.beginPath();
+                ctx.moveTo(i, SETTINGS.beltY + 4);
+                ctx.lineTo(i - 20, SETTINGS.beltY + this.height);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // 4. Draw Rollers underneath (static or simple)
+            ctx.fillStyle = '#a0aec0';
+            const rollerSpacing = 80;
+            for (let i = 20; i < canvasWidth; i += rollerSpacing) {
+                ctx.beginPath();
+                ctx.arc(i, SETTINGS.beltY + this.height + 5, 8, 0, Math.PI * 2);
+                ctx.fill();
+                // Hubcap
+                ctx.fillStyle = '#718096';
+                ctx.beginPath();
+                ctx.arc(i, SETTINGS.beltY + this.height + 5, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#a0aec0'; // Reset for next loop
+            }
+        }
+    }
+
+    // --- Vial Definition ---
+    class ProductionVial {
+        constructor(startX) {
+            this.x = startX;
+            this.width = SETTINGS.vialWidth;
+            this.height = SETTINGS.vialHeight;
+            this.y = SETTINGS.beltY - this.height;
+            
+            // Random properties for subtle vibration
+            this.wobbleOffset = Math.random() * 100;
+            this.fillLevel = 0.5 + Math.random() * 0.1; // Variance in powder amount
+        }
+
+        update() {
+            this.x -= SETTINGS.speed;
+            
+            // If vial goes completely off screen left
+            // We can't just move it to the right immediately or we lose the array order usually,
+            // but for a visual loop we can cheat: find the furthest right vial and add gap.
+            if (this.x + this.width < -50) {
+                // Find max X in current array
+                let maxX = -1000;
+                vials.forEach(v => {
+                    if (v.x > maxX) maxX = v.x;
+                });
+                this.x = maxX + SETTINGS.vialGap;
+            }
+        }
+
+        draw(ctx) {
+            ctx.save();
+            
+            // Add a tiny vibration/wobble rotation
+            const time = Date.now() / 50;
+            const wobble = Math.sin(time + this.wobbleOffset) * 0.02; // Very subtle rattle
+            
+            // Pivot point at the bottom center (sitting on belt)
+            ctx.translate(this.x + this.width/2, this.y + this.height);
+            ctx.rotate(wobble);
+            ctx.translate(-this.width/2, -this.height); // Move back to local 0,0
+
+            // --- Draw Glass Vial Body ---
+            const glassColor = 'rgba(220, 235, 255, 0.5)';
+            const rimColor = 'rgba(100, 120, 140, 0.8)';
+            const powderColor = '#ffffff'; // Solid white
+            
+            // 1. Powder Content (Draw first so it's inside)
+            ctx.fillStyle = powderColor;
+            const contentH = this.height * this.fillLevel;
+            const contentY = this.height - contentH;
+            
+            // Mask for content to stay inside rounded shape
+            ctx.save();
+            ctx.beginPath();
+            const r = 8; // corner radius
+            ctx.moveTo(0, this.height * 0.2); 
+            ctx.lineTo(0, this.height - r);
+            ctx.quadraticCurveTo(0, this.height, r, this.height);
+            ctx.lineTo(this.width - r, this.height);
+            ctx.quadraticCurveTo(this.width, this.height, this.width, this.height - r);
+            ctx.lineTo(this.width, this.height * 0.2);
+            ctx.closePath();
+            ctx.clip(); // Clip to bottle shape
+
+            // Fill Powder
+            ctx.fillRect(0, contentY, this.width, contentH);
+            
+            // Draw a subtle "uneven" top surface for the powder
+            ctx.beginPath();
+            ctx.moveTo(0, contentY);
+            // Draw a small heap in the middle
+            ctx.quadraticCurveTo(this.width / 2, contentY - 3, this.width, contentY);
+            ctx.lineTo(this.width, contentY + 5); // Close shape downwards slightly
+            ctx.lineTo(0, contentY + 5);
+            ctx.fillStyle = powderColor;
+            ctx.fill();
+            
+            ctx.restore();
+
+            // 2. Main Glass Outline
+            ctx.fillStyle = glassColor;
+            ctx.strokeStyle = rimColor;
+            ctx.lineWidth = 1.5;
+            
+            ctx.beginPath();
+            ctx.moveTo(0, this.height * 0.2); 
+            ctx.lineTo(0, this.height - r);
+            ctx.quadraticCurveTo(0, this.height, r, this.height);
+            ctx.lineTo(this.width - r, this.height);
+            ctx.quadraticCurveTo(this.width, this.height, this.width, this.height - r);
+            ctx.lineTo(this.width, this.height * 0.2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // 3. The Neck
+            const neckWidth = this.width * 0.55;
+            const neckX = (this.width - neckWidth) / 2;
+            ctx.fillStyle = glassColor;
+            ctx.fillRect(neckX, this.height * 0.08, neckWidth, this.height * 0.15);
+            ctx.strokeRect(neckX, this.height * 0.08, neckWidth, this.height * 0.15);
+
+            // 4. The Top Flange/Rim
+            const flangeHeight = this.height * 0.1;
+            ctx.fillStyle = 'rgba(230, 240, 255, 0.9)'; 
+            ctx.beginPath();
+            ctx.roundRect(0, 0, this.width, flangeHeight, 3);
+            ctx.fill();
+            ctx.stroke();
+
+            // 5. Highlights
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            // Side highlight
+            ctx.beginPath();
+            ctx.ellipse(this.width * 0.2, this.height * 0.6, 3, this.height * 0.2, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Shoulder highlight
+            ctx.beginPath();
+            ctx.ellipse(this.width * 0.8, this.height * 0.25, 4, 2, Math.PI/4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+    }
+
+    // --- Animation Control ---
+    const vials = [];
+    const belt = new ConveyorBelt();
+
+    function initProductionLine() {
+        vials.length = 0;
+        // Calculate how many vials we need to fill screen + buffer
+        const numVials = Math.ceil(canvasWidth / SETTINGS.vialGap) + 2;
+        
+        for (let i = 0; i < numVials; i++) {
+            // Start them spaced out
+            vials.push(new ProductionVial(canvasWidth + (i * SETTINGS.vialGap)));
+        }
+        
+        // Let's just shift them back so the screen is full initially
+        const shiftBack = numVials * SETTINGS.vialGap;
+        vials.forEach(v => v.x -= (shiftBack - canvasWidth)); 
+    }
+
+    function animate() {
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+        // 1. Update & Draw Belt
+        belt.update();
+        belt.draw(ctx);
+
+        // 2. Update & Draw Vials
+        vials.forEach(vial => {
+            vial.update();
+            vial.draw(ctx);
+        });
+
+        // 3. Draw a front rail (optional, for depth)
+        // A thin line at the bottom of the belt to make vials look 'in' the machine
+        ctx.fillStyle = 'rgba(113, 128, 150, 0.3)';
+        ctx.fillRect(0, SETTINGS.beltY + 15, canvasWidth, 2);
+
+        requestAnimationFrame(animate);
+    }
+
+    // Start
+    initProductionLine();
+    animate();
+
+</script>
+</body>
+</html>

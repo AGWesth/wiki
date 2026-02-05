@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ANOVA Explorer: Signal vs Noise</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f8fafc; }
+        /* Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            cursor: pointer;
+            margin-top: -7px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #e2e8f0;
+            border-radius: 2px;
+        }
+        /* Group Colors */
+        .thumb-a::-webkit-slider-thumb { background: #ef4444; } /* Red */
+        .thumb-b::-webkit-slider-thumb { background: #3b82f6; } /* Blue */
+        .thumb-c::-webkit-slider-thumb { background: #10b981; } /* Emerald */
+        .thumb-gray::-webkit-slider-thumb { background: #64748b; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden flex flex-col lg:flex-row">
+        
+        <!-- Controls Panel -->
+        <div class="w-full lg:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">ANOVA Explorer</h1>
+                <p class="text-sm text-slate-500 mb-6">Analysis of Variance.<br>Is the Signal stronger than the Noise?</p>
+
+                <!-- Signal Controls -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 space-y-4">
+                    <p class="text-xs font-bold text-slate-400 uppercase border-b pb-2">1. The Signal (Group Means)</p>
+                    
+                    <!-- Group A -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-xs font-bold text-red-500">Group A Mean</label>
+                            <span id="val-ma" class="text-xs font-mono text-slate-600">40</span>
+                        </div>
+                        <input type="range" id="slider-ma" min="20" max="80" value="40" class="thumb-a">
+                    </div>
+
+                    <!-- Group B -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-xs font-bold text-blue-500">Group B Mean</label>
+                            <span id="val-mb" class="text-xs font-mono text-slate-600">50</span>
+                        </div>
+                        <input type="range" id="slider-mb" min="20" max="80" value="50" class="thumb-b">
+                    </div>
+
+                    <!-- Group C -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-xs font-bold text-emerald-500">Group C Mean</label>
+                            <span id="val-mc" class="text-xs font-mono text-slate-600">60</span>
+                        </div>
+                        <input type="range" id="slider-mc" min="20" max="80" value="60" class="thumb-c">
+                    </div>
+                </div>
+
+                <!-- Noise Control -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6">
+                    <p class="text-xs font-bold text-slate-400 uppercase border-b pb-2 mb-3">2. The Noise (Within Variance)</p>
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <label class="text-xs font-bold text-slate-600">Spread (Std Dev)</label>
+                            <span id="val-sd" class="text-xs font-mono text-slate-600">5.0</span>
+                        </div>
+                        <input type="range" id="slider-sd" min="1" max="20" step="0.5" value="5" class="thumb-gray">
+                    </div>
+                </div>
+
+                <!-- Result Box -->
+                <div id="result-card" class="p-4 rounded-xl border-l-4 bg-slate-100 border-slate-300 transition-colors duration-300">
+                    <div class="flex justify-between items-end mb-2">
+                        <div>
+                            <p class="text-xs font-bold text-slate-500 uppercase">F-Statistic</p>
+                            <p id="val-f" class="text-2xl font-mono font-bold text-slate-800">--</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs font-bold text-slate-500 uppercase">P-Value</p>
+                            <p id="val-p" class="text-xl font-mono font-bold text-slate-800">--</p>
+                        </div>
+                    </div>
+                    <div id="decision-text" class="text-sm font-bold text-slate-600 pt-2 border-t border-slate-200/50">
+                        Adjust sliders...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart Panel -->
+        <div class="w-full lg:w-2/3 p-6 bg-white relative flex flex-col">
+            
+            <!-- Main Plot -->
+            <div class="relative h-[350px] w-full">
+                <canvas id="anovaCanvas"></canvas>
+            </div>
+
+            <!-- Visual Metaphor: The F-Balance -->
+            <div class="mt-4 bg-slate-50 rounded-lg p-4 border border-slate-100 flex items-center justify-around h-32">
+                
+                <!-- Between Variance (Signal) -->
+                <div class="text-center w-1/3">
+                    <p class="text-[10px] font-bold text-indigo-500 uppercase mb-1">Variance Between Groups</p>
+                    <div class="h-2 bg-indigo-100 rounded-full overflow-hidden w-full max-w-[150px] mx-auto">
+                        <div id="bar-between" class="h-full bg-indigo-500 transition-all duration-300" style="width: 50%"></div>
+                    </div>
+                    <p id="text-msb" class="text-xs font-mono text-slate-500 mt-1">MS_between</p>
+                </div>
+
+                <div class="text-2xl font-bold text-slate-300">/</div>
+
+                <!-- Within Variance (Noise) -->
+                <div class="text-center w-1/3">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase mb-1">Variance Within Groups</p>
+                    <div class="h-2 bg-slate-200 rounded-full overflow-hidden w-full max-w-[150px] mx-auto">
+                        <div id="bar-within" class="h-full bg-slate-500 transition-all duration-300" style="width: 50%"></div>
+                    </div>
+                    <p id="text-msw" class="text-xs font-mono text-slate-500 mt-1">MS_within</p>
+                </div>
+
+                <div class="text-2xl font-bold text-slate-300">=</div>
+
+                <!-- F Ratio -->
+                <div class="text-center w-1/4">
+                    <div class="bg-white border-2 border-indigo-100 rounded-lg p-2 shadow-sm">
+                        <p class="text-xs font-bold text-slate-400 uppercase">F Ratio</p>
+                        <p id="val-f-mini" class="text-xl font-bold text-indigo-600">--</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        Chart.register(window['chartjs-plugin-annotation']);
+
+        const ctx = document.getElementById('anovaCanvas').getContext('2d');
+        
+        // Sliders
+        const sMa = document.getElementById('slider-ma');
+        const sMb = document.getElementById('slider-mb');
+        const sMc = document.getElementById('slider-mc');
+        const sSd = document.getElementById('slider-sd');
+        
+        // Labels
+        const vMa = document.getElementById('val-ma');
+        const vMb = document.getElementById('val-mb');
+        const vMc = document.getElementById('val-mc');
+        const vSd = document.getElementById('val-sd');
+        
+        // Results
+        const vF = document.getElementById('val-f');
+        const vFMini = document.getElementById('val-f-mini');
+        const vP = document.getElementById('val-p');
+        const card = document.getElementById('result-card');
+        const decision = document.getElementById('decision-text');
+        
+        // Visual Bars
+        const barBetween = document.getElementById('bar-between');
+        const barWithin = document.getElementById('bar-within');
+        const textMsb = document.getElementById('text-msb');
+        const textMsw = document.getElementById('text-msw');
+
+        let chart;
+        const nPerGroup = 20; // Fixed sample size per group
+        const k = 3; // Number of groups
+        const N = nPerGroup * k; // Total samples
+        let errors = []; // Store random noise locally
+
+        // Use Box-Muller for Normal Random
+        function randn_bm() {
+            let u = 0, v = 0;
+            while(u === 0) u = Math.random(); 
+            while(v === 0) v = Math.random();
+            return Math.sqrt( -2.0 * Math.log( u ) ) * Math.cos( 2.0 * Math.PI * v );
+        }
+
+        // Initialize Errors once
+        for(let i=0; i<N; i++) errors.push(randn_bm());
+
+        // F-Distribution CDF Approximation (for p-value)
+        function getCriticalF(df1, df2) {
+            // Approx for alpha = 0.05, df1=2, df2=57 (approx 60) -> F_crit ~ 3.15
+            return 3.15;
+        }
+
+        // Generate Data
+        function generateData(mean, sd, groupId) {
+            const data = [];
+            for(let i=0; i<nPerGroup; i++) {
+                data.push({
+                    x: mean + randn_bm() * sd,
+                    y: groupId + (Math.random() - 0.5) * 0.4 // Jitter on Y for visualization
+                });
+            }
+            return data;
+        }
+
+        function update() {
+            const ma = parseInt(sMa.value);
+            const mb = parseInt(sMb.value);
+            const mc = parseInt(sMc.value);
+            const sd = parseFloat(sSd.value);
+
+            vMa.textContent = ma;
+            vMb.textContent = mb;
+            vMc.textContent = mc;
+            vSd.textContent = sd;
+
+            // Create Data
+            const groups = [ma, mb, mc];
+            
+            // ANOVA Calculation Variables
+            let sumX = 0;
+            let sumX2 = 0;
+            const groupMeans = [];
+            const groupSums = [];
+
+            let globalIdx = 0;
+
+            // Generate Points and Calc Stats
+            const pointsA = [];
+            const pointsB = [];
+            const pointsC = [];
+            const pointSets = [pointsA, pointsB, pointsC];
+
+            groups.forEach((mu, i) => {
+                let gSum = 0;
+                for(let j=0; j<nPerGroup; j++) {
+                    // Use stored errors for stability during slider movement
+                    let val = mu + errors[globalIdx] * sd; 
+                    globalIdx++;
+                    
+                    pointSets[i].push({x: val, y: (i+1) + (Math.random()-0.5)*0.3}); // Y is just categorical 1, 2, 3
+                    
+                    gSum += val;
+                    sumX += val;
+                    sumX2 += val * val;
+                }
+                groupSums.push(gSum);
+                groupMeans.push(gSum / nPerGroup);
+            });
+
+            // Grand Mean
+            const GM = sumX / N;
+
+            // SS Total = sum(X^2) - (sumX)^2 / N
+            const SST = sumX2 - (sumX * sumX) / N;
+
+            // SS Between = sum( n_i * (Mean_i - GM)^2 )
+            let SSB = 0;
+            groupMeans.forEach(m => {
+                SSB += nPerGroup * Math.pow(m - GM, 2);
+            });
+
+            // SS Within = SST - SSB
+            const SSW = SST - SSB;
+
+            // Degrees of Freedom
+            const dfBetween = k - 1; // 2
+            const dfWithin = N - k;  // 57
+
+            // Mean Squares
+            const MSB = SSB / dfBetween;
+            const MSW = SSW / dfWithin;
+
+            // F Ratio
+            const F = MSB / MSW;
+
+            // Update UI
+            vF.textContent = F.toFixed(2);
+            vFMini.textContent = F.toFixed(2);
+
+            // Calculate exact P-Value
+            // Special closed-form case for ANOVA with 3 groups (df1 = k-1 = 2)
+            // Formula: P(F > f) = (1 + (df1 * f) / df2) ^ (-df2 / 2)
+            // Simplified for df1=2: (1 + 2f / df2) ^ (-df2 / 2)
+            const pValue = Math.pow(1 + (2 * F) / dfWithin, -dfWithin / 2);
+            
+            let pText = "";
+            if (pValue < 0.001) {
+                pText = "< 0.001";
+            } else {
+                pText = pValue.toFixed(3);
+            }
+            vP.textContent = pText;
+
+            // Decision Logic based on exact P-value
+            if (pValue < 0.05) {
+                card.className = "p-4 rounded-xl border-l-4 bg-emerald-50 border-emerald-500 transition-colors duration-300";
+                decision.innerHTML = `<span class="text-emerald-600">Significant Difference!</span><br>p (${pText}) < 0.05`;
+            } else {
+                card.className = "p-4 rounded-xl border-l-4 bg-slate-100 border-slate-300 transition-colors duration-300";
+                decision.innerHTML = `<span class="text-slate-500">Not Significant.</span><br>p (${pText}) > 0.05`;
+            }
+
+            // Update Visual Bars (Log scale roughly for visualization stability)
+            // Or linear but capped.
+            const maxVal = Math.max(MSB, MSW);
+            const wB = (MSB / maxVal) * 100;
+            const wW = (MSW / maxVal) * 100;
+            
+            barBetween.style.width = `${Math.max(5, wB)}%`;
+            barWithin.style.width = `${Math.max(5, wW)}%`;
+            
+            textMsb.textContent = Math.round(MSB);
+            textMsw.textContent = Math.round(MSW);
+
+            drawChart(pointSets, GM);
+        }
+
+        function drawChart(pointSets, GM) {
+            if (!chart) {
+                chart = new Chart(ctx, {
+                    type: 'scatter',
+                    data: {
+                        datasets: [
+                            {
+                                label: 'Group A',
+                                data: pointSets[0],
+                                backgroundColor: '#ef4444',
+                                pointRadius: 4,
+                                pointHoverRadius: 6
+                            },
+                            {
+                                label: 'Group B',
+                                data: pointSets[1],
+                                backgroundColor: '#3b82f6',
+                                pointRadius: 4,
+                                pointHoverRadius: 6
+                            },
+                            {
+                                label: 'Group C',
+                                data: pointSets[2],
+                                backgroundColor: '#10b981',
+                                pointRadius: 4,
+                                pointHoverRadius: 6
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 0 },
+                        scales: {
+                            x: {
+                                min: 0,
+                                max: 100,
+                                title: { display: true, text: 'Value' },
+                                grid: { color: '#f1f5f9' }
+                            },
+                            y: {
+                                min: 0.5,
+                                max: 3.5,
+                                display: false // Hide Y axis numbers as they are just categorical
+                            }
+                        },
+                        plugins: {
+                            legend: { display: true, position: 'top' },
+                            annotation: {
+                                annotations: {
+                                    grandMeanLine: {
+                                        type: 'line',
+                                        xMin: GM,
+                                        xMax: GM,
+                                        borderColor: '#94a3b8',
+                                        borderWidth: 2,
+                                        borderDash: [5, 5],
+                                        label: {
+                                            display: true,
+                                            content: 'Grand Mean',
+                                            position: 'end',
+                                            backgroundColor: '#94a3b8',
+                                            color: 'white',
+                                            yAdjust: 10
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                chart.data.datasets[0].data = pointSets[0];
+                chart.data.datasets[1].data = pointSets[1];
+                chart.data.datasets[2].data = pointSets[2];
+                
+                chart.options.plugins.annotation.annotations.grandMeanLine.xMin = GM;
+                chart.options.plugins.annotation.annotations.grandMeanLine.xMax = GM;
+
+                chart.update();
+            }
+        }
+
+        // Listeners
+        sMa.addEventListener('input', update);
+        sMb.addEventListener('input', update);
+        sMc.addEventListener('input', update);
+        sSd.addEventListener('input', update);
+
+        // Init
+        update();
+    })();
+    </script>
+</body>
+</html>

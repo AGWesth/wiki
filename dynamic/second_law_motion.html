@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Newton's Second Law Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f8fafc; }
+        canvas { touch-action: none; }
+        /* Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+        .thumb-mass::-webkit-slider-thumb { background: #059669; } /* Emerald */
+        .thumb-force::-webkit-slider-thumb { background: #e11d48; } /* Rose */
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden flex flex-col lg:flex-row">
+        
+        <!-- Controls Panel -->
+        <div class="w-full lg:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Newton's Second Law</h1>
+                <p class="text-sm text-slate-500 mb-6">Force, Mass, and Acceleration.</p>
+
+                <!-- Equation Box -->
+                <div class="bg-slate-800 text-white p-4 rounded-xl shadow-md mb-6 text-center">
+                    <p class="text-xs text-slate-400 uppercase font-bold mb-2">The Law</p>
+                    <div class="text-xl font-mono mb-2">
+                        \[ a = \frac{F}{m} \]
+                    </div>
+                    <div id="calc-display" class="text-sm font-mono text-emerald-400 border-t border-slate-600 pt-2">
+                        <!-- Dynamic Calc -->
+                        0.00 = 0 / 10
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="space-y-6">
+                    <!-- Mass Slider -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-bold text-slate-700 text-sm text-emerald-600">Mass (m)</label>
+                            <span id="val-mass" class="font-mono text-emerald-600 font-bold">10 kg</span>
+                        </div>
+                        <input type="range" id="slider-mass" min="1" max="50" step="1" value="10" class="thumb-mass">
+                        <p class="text-[10px] text-slate-400 mt-1">More mass = More inertia (harder to move).</p>
+                    </div>
+
+                    <!-- Force Slider -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-bold text-slate-700 text-sm text-rose-600">Net Force (F)</label>
+                            <span id="val-force" class="font-mono text-rose-600 font-bold">0 N</span>
+                        </div>
+                        <!-- Range centered at 0 -->
+                        <input type="range" id="slider-force" min="-50" max="50" step="1" value="0" class="thumb-force">
+                        <div class="flex justify-between text-[10px] text-slate-400 mt-1">
+                            <span>&larr; Left</span>
+                            <span>0</span>
+                            <span>Right &rarr;</span>
+                        </div>
+                    </div>
+
+                    <button id="btn-stop" class="w-full py-3 rounded-lg border-2 border-slate-200 text-slate-600 font-bold hover:bg-slate-100 transition text-sm">
+                        Kill Velocity (Stop)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="mt-8 pt-6 border-t border-slate-200 grid grid-cols-2 gap-4">
+                <div>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase">Acceleration</p>
+                    <p id="stat-acc" class="text-lg font-mono font-bold text-rose-600">0.00 m/s²</p>
+                </div>
+                <div>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase">Velocity</p>
+                    <p id="stat-vel" class="text-lg font-mono font-bold text-blue-600">0.00 m/s</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Canvas Panel -->
+        <div class="w-full lg:w-2/3 p-0 relative bg-slate-900 flex items-center justify-center overflow-hidden">
+            <canvas id="simCanvas" class="w-full h-full block"></canvas>
+            
+            <!-- Grid Overlay text -->
+            <div class="absolute bottom-4 left-4 text-slate-500 text-xs font-mono">
+                Frictionless Environment (Space)
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // UI Elements
+        const sMass = document.getElementById('slider-mass');
+        const sForce = document.getElementById('slider-force');
+        const vMass = document.getElementById('val-mass');
+        const vForce = document.getElementById('val-force');
+        const calcDisp = document.getElementById('calc-display');
+        const statAcc = document.getElementById('stat-acc');
+        const statVel = document.getElementById('stat-vel');
+        const btnStop = document.getElementById('btn-stop');
+
+        // Physics State
+        let mass = 10;
+        let force = 0;
+        let acc = 0;
+        let vel = 0;
+        let pos = { x: 0, y: 0 }; // Set in resize
+        
+        // Animation
+        let lastTime = 0;
+        const pixelsPerMeter = 20; // Scale
+
+        function resize() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight || 500;
+            pos.y = canvas.height / 2;
+            if (pos.x === 0) pos.x = canvas.width / 2;
+        }
+        window.addEventListener('resize', resize);
+
+        function updatePhysics(dt) {
+            // F = ma  =>  a = F / m
+            acc = force / mass;
+            
+            // v = v + a*t
+            vel += acc * dt;
+            
+            // x = x + v*t
+            pos.x += vel * dt * pixelsPerMeter;
+
+            // Infinite Scroll / Wrap
+            const margin = 100;
+            if (pos.x > canvas.width + margin) pos.x = -margin;
+            if (pos.x < -margin) pos.x = canvas.width + margin;
+        }
+
+        function drawRocket(x, y, m, f) {
+            ctx.save();
+            ctx.translate(x, y);
+
+            // Scale size based on mass (visual only)
+            // Area proportional to mass -> Radius proportional to sqrt(mass)
+            const scale = 0.5 + Math.sqrt(m) / 4; 
+            ctx.scale(scale, scale);
+
+            // 1. Draw Exhaust Flames
+            if (Math.abs(f) > 0.1) {
+                const isRight = f > 0;
+                const flameLen = Math.abs(f) * 1.5; // Flame length based on force
+                
+                ctx.beginPath();
+                if (isRight) {
+                    // Thrusting Right -> Flame points Left
+                    ctx.moveTo(-25, -10);
+                    ctx.lineTo(-25 - flameLen, 0);
+                    ctx.lineTo(-25, 10);
+                } else {
+                    // Thrusting Left -> Flame points Right (Retro)
+                    ctx.moveTo(25, -10);
+                    ctx.lineTo(25 + flameLen, 0);
+                    ctx.lineTo(25, 10);
+                }
+                ctx.fillStyle = '#f59e0b'; // Amber
+                ctx.fill();
+                
+                // Inner flame
+                ctx.beginPath();
+                if (isRight) {
+                    ctx.moveTo(-25, -5);
+                    ctx.lineTo(-25 - flameLen*0.6, 0);
+                    ctx.lineTo(-25, 5);
+                } else {
+                    ctx.moveTo(25, -5);
+                    ctx.lineTo(25 + flameLen*0.6, 0);
+                    ctx.lineTo(25, 5);
+                }
+                ctx.fillStyle = '#fef3c7'; // Light yellow
+                ctx.fill();
+            }
+
+            // 2. Draw Body (Square/Box)
+            ctx.fillStyle = '#e2e8f0'; // Slate-200
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 2;
+            
+            // Main Hull
+            ctx.beginPath();
+            ctx.rect(-25, -25, 50, 50);
+            ctx.fill();
+            ctx.stroke();
+            
+            // Mass Label on body
+            ctx.fillStyle = '#475569';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(m + "kg", 0, 0);
+
+            ctx.restore();
+        }
+
+        function drawVectors(x, y, a, v) {
+            // Draw Vectors (Non-scaled by mass transform, absolute screen space)
+            const vecY = y - 60; // Draw above object
+
+            // Velocity Vector (Blue)
+            if (Math.abs(v) > 0.1) {
+                const vLen = v * 10; // Visual scale
+                drawArrow(x, vecY, x + vLen, vecY, '#3b82f6', 2);
+                ctx.fillStyle = '#3b82f6';
+                ctx.font = '10px sans-serif';
+                ctx.fillText("v", x + vLen/2, vecY - 5);
+            }
+
+            // Acceleration/Force Vector (Red)
+            // We draw Force actually, since F causes a.
+            if (Math.abs(force) > 0) {
+                const fLen = force * 2; // Visual scale
+                const fY = y + 60; // Below object
+                drawArrow(x, fY, x + fLen, fY, '#e11d48', 4);
+                ctx.fillStyle = '#e11d48';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.fillText(`F = ${force}N`, x + fLen/2, fY + 15);
+                
+                // Draw 'a' label near arrow
+                ctx.fillText(`a`, x + fLen + (force>0?10:-10), fY);
+            }
+        }
+
+        function drawArrow(x1, y1, x2, y2, color, width) {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            // Arrow head
+            const angle = Math.atan2(y2 - y1, x2 - x1);
+            const headLen = 10;
+            ctx.beginPath();
+            ctx.moveTo(x2, y2);
+            ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+            ctx.lineWidth = 1;
+            const gridSize = 100;
+            // Moving grid effect
+            const offset = pos.x % gridSize;
+            
+            for (let x = -offset; x < canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            // Horizontal
+            for (let y = 0; y < canvas.height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+        }
+
+        function loop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const dt = (timestamp - lastTime) / 1000; // Seconds
+            lastTime = timestamp;
+
+            updatePhysics(dt);
+
+            // Draw
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawGrid(); // Parallax/Movement reference
+            drawRocket(pos.x, pos.y, mass, force);
+            drawVectors(pos.x, pos.y, acc, vel);
+
+            // UI Updates
+            vMass.textContent = mass + " kg";
+            vForce.textContent = (force > 0 ? "+" : "") + force + " N";
+            statAcc.textContent = acc.toFixed(2) + " m/s²";
+            statVel.textContent = vel.toFixed(2) + " m/s";
+            
+            // Formula Update
+            calcDisp.innerHTML = `${acc.toFixed(2)} = ${force} / ${mass}`;
+
+            requestAnimationFrame(loop);
+        }
+
+        // Inputs
+        sMass.addEventListener('input', () => { mass = parseInt(sMass.value); });
+        sForce.addEventListener('input', () => { force = parseInt(sForce.value); });
+        
+        btnStop.addEventListener('click', () => {
+            vel = 0;
+            force = 0;
+            sForce.value = 0;
+        });
+
+        // Init
+        resize();
+        requestAnimationFrame(loop);
+
+    })();
+    </script>
+</body>
+</html>

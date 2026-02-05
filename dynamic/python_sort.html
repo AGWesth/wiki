@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pandas sort_values() Visualization</title>
+    <style>
+        :root {
+            --pd-header: #eeeeee;
+            --pd-border: #b9b9b9;
+            --pd-index: #f5f5f5;
+            --code-bg: #282c34;
+            --code-text: #abb2bf;
+            --accent: #e83e8c;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #fafafa;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px;
+        }
+
+        h1 { margin-bottom: 10px; }
+        p { color: #666; margin-bottom: 30px; }
+
+        /* DataFrame Styling */
+        .dataframe-container {
+            margin-bottom: 30px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            background: white;
+        }
+
+        table.dataframe {
+            border-collapse: collapse;
+            border: none;
+            font-size: 14px;
+        }
+
+        table.dataframe th, table.dataframe td {
+            padding: 8px 16px;
+            text-align: right; /* Pandas standard alignment */
+            border: 1px solid var(--pd-border);
+        }
+
+        table.dataframe th {
+            background-color: var(--pd-header);
+            font-weight: bold;
+            text-align: center;
+        }
+
+        /* Styling the index column */
+        table.dataframe tbody tr th {
+            background-color: var(--pd-index);
+            font-weight: normal;
+            min-width: 30px;
+        }
+
+        /* Controls Section */
+        .editor-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            background: var(--code-bg);
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .prompt {
+            color: #61afef;
+            margin-right: 10px;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            user-select: none;
+        }
+
+        input[type="text"] {
+            background: transparent;
+            border: none;
+            color: var(--code-text);
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 16px;
+            width: 100%;
+            outline: none;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        button:hover { background-color: #45a049; }
+
+        /* Feedback Messages */
+        #message {
+            min-height: 24px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+        }
+        .error { color: #d32f2f; }
+        .success { color: #388e3c; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Pandas Visualization: sort_values</h1>
+    <p>Sort the dataframe by a specific column. Available columns: <strong>Name, Age, Salary, Department</strong>.</p>
+
+    <div class="dataframe-container">
+        <table class="dataframe" id="df-table">
+            <thead>
+                </thead>
+            <tbody>
+                </tbody>
+        </table>
+    </div>
+
+    <div class="editor-container">
+        <div class="input-group">
+            <span class="prompt">In [1]:</span>
+            <input type="text" id="code-input" value="df.sort_values('Age')" placeholder="df.sort_values('column_name')" autocomplete="off">
+        </div>
+        
+        <div id="message"></div>
+        
+        <button onclick="executeCode()">Run Code</button>
+    </div>
+
+    <script>
+        // 1. Setup the initial Data (The "DataFrame")
+        // We use an array of objects to represent rows
+        const originalData = [
+            { id: 0, Name: "Alice", Age: 29, Salary: 85000, Department: "Engineering" },
+            { id: 1, Name: "Bob", Age: 34, Salary: 72000, Department: "Marketing" },
+            { id: 2, Name: "Charlie", Age: 25, Salary: 50000, Department: "Support" },
+            { id: 3, Name: "Diana", Age: 42, Salary: 95000, Department: "Engineering" },
+            { id: 4, Name: "Evan", Age: 31, Salary: 68000, Department: "Sales" }
+        ];
+
+        let currentData = [...originalData]; // Copy of data to manipulate
+
+        // 2. Function to Render the Table
+        function renderTable(data) {
+            const table = document.getElementById('df-table');
+            const thead = table.querySelector('thead');
+            const tbody = table.querySelector('tbody');
+
+            // Clear existing
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+
+            // Get Headers (excluding internal ID if we wanted, but we keep structure simple)
+            // We want to simulate a Pandas Index, so we separate the data columns
+            const cols = Object.keys(data[0]).filter(k => k !== 'id');
+
+            // Build Header Row
+            let headerHtml = '<tr><th></th>'; // Empty corner for index
+            cols.forEach(col => {
+                headerHtml += `<th>${col}</th>`;
+            });
+            headerHtml += '</tr>';
+            thead.innerHTML = headerHtml;
+
+            // Build Rows
+            data.forEach(row => {
+                let tr = document.createElement('tr');
+                // Index Cell (using our internal ID as the pandas index)
+                tr.innerHTML = `<th>${row.id}</th>`; 
+                
+                cols.forEach(col => {
+                    tr.innerHTML += `<td>${row[col]}</td>`;
+                });
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 3. Logic to Parse and Execute "Python" Code
+        function executeCode() {
+            const input = document.getElementById('code-input').value.trim();
+            const messageEl = document.getElementById('message');
+            
+            // Regex to parse: df.sort_values('ColumnName') or df.sort_values(by='ColumnName')
+            // It allows single or double quotes
+            const regex = /^df\.sort_values\((?:by\s*=\s*)?['"]([a-zA-Z]+)['"]\)$/;
+            const match = input.match(regex);
+
+            if (!match) {
+                // Syntax Error
+                messageEl.textContent = "SyntaxError: invalid syntax. Expected: df.sort_values('Column')";
+                messageEl.className = "error";
+                shakeInput();
+                return;
+            }
+
+            const colName = match[1]; // The captured column name
+            const validColumns = ["Name", "Age", "Salary", "Department"];
+
+            if (!validColumns.includes(colName)) {
+                // Pandas KeyError simulation
+                messageEl.textContent = `KeyError: '${colName}'`;
+                messageEl.className = "error";
+                return;
+            }
+
+            // Perform the Sort (Javascript logic mimicking Pandas)
+            // We use [...] to create a new array ref to trigger "reactivity" concept
+            currentData = [...originalData].sort((a, b) => {
+                if (a[colName] < b[colName]) return -1;
+                if (a[colName] > b[colName]) return 1;
+                return 0;
+            });
+
+            // Update UI
+            renderTable(currentData);
+            messageEl.textContent = `Out[1]: DataFrame sorted by ${colName}`;
+            messageEl.className = "success";
+        }
+
+        // Animation for error
+        function shakeInput() {
+            const editor = document.querySelector('.input-group');
+            editor.animate([
+                { transform: 'translateX(0)' },
+                { transform: 'translateX(-10px)' },
+                { transform: 'translateX(10px)' },
+                { transform: 'translateX(0)' }
+            ], {
+                duration: 300
+            });
+        }
+
+        // Initial Render
+        renderTable(currentData);
+
+        // Allow "Enter" key to submit
+        document.getElementById("code-input").addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                executeCode();
+            }
+        });
+
+    </script>
+</body>
+</html>

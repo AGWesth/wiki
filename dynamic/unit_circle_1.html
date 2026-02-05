@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unit Circle Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+        canvas {
+            cursor: crosshair;
+            touch-action: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-5xl overflow-hidden flex flex-col md:flex-row">
+        
+        <!-- Info Panel -->
+        <div class="w-full md:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col">
+            <h1 class="text-2xl font-bold text-slate-800 mb-2">Unit Circle Explorer</h1>
+            <p class="text-sm text-slate-500 mb-6">Trigonometry Visualized.<br>Radius = 1.</p>
+
+            <!-- Values Display -->
+            <div class="space-y-4 mb-8">
+                <!-- Angle -->
+                <div class="bg-slate-800 text-white p-4 rounded-xl shadow-md text-center">
+                    <p class="text-xs text-slate-400 uppercase font-bold mb-1">Angle (\(\theta\))</p>
+                    <div id="angle-display" class="text-xl font-mono">
+                        0&deg; / 0 rad
+                    </div>
+                </div>
+
+                <!-- Sin -->
+                <div class="flex items-center justify-between bg-white p-3 rounded-lg border-l-4 border-rose-500 shadow-sm">
+                    <span class="font-bold text-rose-600">sin(\(\theta\))</span>
+                    <span id="val-sin" class="font-mono text-slate-700">0.00</span>
+                </div>
+
+                <!-- Cos -->
+                <div class="flex items-center justify-between bg-white p-3 rounded-lg border-l-4 border-blue-600 shadow-sm">
+                    <span class="font-bold text-blue-600">cos(\(\theta\))</span>
+                    <span id="val-cos" class="font-mono text-slate-700">1.00</span>
+                </div>
+
+                <!-- Tan -->
+                <div class="flex items-center justify-between bg-white p-3 rounded-lg border-l-4 border-emerald-500 shadow-sm">
+                    <span class="font-bold text-emerald-600">tan(\(\theta\))</span>
+                    <span id="val-tan" class="font-mono text-slate-700">0.00</span>
+                </div>
+            </div>
+
+            <!-- Teaching Note -->
+            <div class="mt-auto pt-6 border-t border-slate-200">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Concept Recall</h3>
+                <ul class="text-xs text-slate-600 space-y-2">
+                    <li><span class="text-rose-600 font-bold">Sin</span> is the <span class="font-semibold">y-coordinate</span> on the circle.</li>
+                    <li><span class="text-blue-600 font-bold">Cos</span> is the <span class="font-semibold">x-coordinate</span> on the circle.</li>
+                    <li><span class="text-emerald-600 font-bold">Tan</span> is the length on the <span class="font-semibold">tangent line</span> (x=1).</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Canvas -->
+        <div class="w-full md:w-2/3 p-4 bg-white relative flex items-center justify-center bg-grid-slate-100">
+            <canvas id="unitCanvas" width="600" height="600" class="w-full max-w-[500px] h-auto rounded-lg shadow-inner bg-slate-50 border border-slate-200"></canvas>
+            
+            <!-- Tooltip -->
+            <div id="tooltip" class="absolute pointer-events-none bg-slate-900 text-white text-xs px-2 py-1 rounded opacity-0 transition-opacity">
+                (x, y)
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const canvas = document.getElementById('unitCanvas');
+        const ctx = canvas.getContext('2d');
+        const angleDisplay = document.getElementById('angle-display');
+        const valSin = document.getElementById('val-sin');
+        const valCos = document.getElementById('val-cos');
+        const valTan = document.getElementById('val-tan');
+        const tooltip = document.getElementById('tooltip');
+
+        // Config
+        const scale = 200; // Pixels per unit
+        let theta = Math.PI / 4; // Initial angle (45 deg)
+
+        // --- Drawing Helpers ---
+
+        function toCanvas(x, y) {
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            return {
+                x: cx + (x * scale),
+                y: cy - (y * scale) // Canvas Y is inverted
+            };
+        }
+
+        function fromCanvas(px, py) {
+            const rect = canvas.getBoundingClientRect();
+            // Handle CSS scaling
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+
+            return {
+                x: (px * scaleX - cx) / scale,
+                y: (cy - py * scaleY) / scale 
+            };
+        }
+
+        function drawLine(p1, p2, color, width=2, dashed=false) {
+            const start = toCanvas(p1.x, p1.y);
+            const end = toCanvas(p2.x, p2.y);
+            
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            if(dashed) ctx.setLineDash([5, 5]);
+            else ctx.setLineDash([]);
+            
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(end.x, end.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        function drawText(text, p, color, align='center', baseline='middle') {
+            const pos = toCanvas(p.x, p.y);
+            ctx.fillStyle = color;
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = align;
+            ctx.textBaseline = baseline;
+            ctx.fillText(text, pos.x, pos.y);
+        }
+
+        function drawCircle() {
+            const center = toCanvas(0, 0);
+            
+            // Unit Circle
+            ctx.beginPath();
+            ctx.strokeStyle = '#94a3b8'; // slate-400
+            ctx.lineWidth = 2;
+            ctx.arc(center.x, center.y, scale, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            // Axes
+            ctx.beginPath();
+            ctx.strokeStyle = '#e2e8f0'; // slate-200
+            ctx.lineWidth = 1;
+            // X Axis
+            ctx.moveTo(0, center.y);
+            ctx.lineTo(canvas.width, center.y);
+            // Y Axis
+            ctx.moveTo(center.x, 0);
+            ctx.lineTo(center.x, canvas.height);
+            ctx.stroke();
+        }
+
+        function drawAngleArc(angle) {
+            const center = toCanvas(0, 0);
+            const radius = 30;
+            ctx.beginPath();
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 2;
+            // Canvas Arc takes standard angles (0 is right, CW is positive)
+            // But we have Cartesian Y inverted.
+            // Angle 0 is East. Angle -PI/2 is North in Canvas coords.
+            // Our 'theta' is standard mathematical (CCW from East).
+            // We need to draw from 0 to -theta.
+            ctx.arc(center.x, center.y, radius, 0, -angle, angle > 0);
+            ctx.stroke();
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawCircle();
+            drawAngleArc(theta);
+
+            // Coordinates on Unit Circle
+            const cos = Math.cos(theta);
+            const sin = Math.sin(theta);
+            const tan = Math.tan(theta);
+
+            const origin = {x: 0, y: 0};
+            const point = {x: cos, y: sin};
+            const foot = {x: cos, y: 0}; // Projection on X axis
+
+            // 1. Radius Line (The Hypotenuse)
+            drawLine(origin, point, '#1e293b', 2); // Slate-800
+
+            // 2. Cosine Line (Blue, Horizontal on X-axis)
+            drawLine(origin, foot, '#2563eb', 4); // Blue-600
+            
+            // 3. Sine Line (Red, Vertical from X-axis to Point)
+            drawLine(foot, point, '#e11d48', 4); // Rose-600
+
+            // 4. Tangent Visuals
+            // We draw the vertical tangent line at x=1 (or x=-1)
+            // And extend the radius to meet it.
+            
+            // If cos is 0 (90 deg), tan is undefined, don't draw
+            if(Math.abs(cos) > 0.001) {
+                // We typically visualize tan on the line x=1 for Q1/Q4
+                // For Q2/Q3, we can project back to x=1 or use x=-1.
+                // Standard visual proofs often use x=1. Let's try to project to x=1 always for consistency,
+                // unless it goes off screen too much.
+                
+                // Let's stick to the visual definition: Tangent at x=1
+                const tanX = 1;
+                const tanY = tan; 
+                const tanPoint = {x: tanX, y: tanY};
+                
+                // Draw the vertical "Wall" at x=1
+                drawLine({x: 1, y: -10}, {x: 1, y: 10}, '#cbd5e1', 1); // Faint line at x=1
+                
+                // Only draw the extension line if it's within reasonable view bounds
+                if (Math.abs(tan) < 4) {
+                     // Extension from Origin to Tan Point
+                    drawLine(origin, tanPoint, '#94a3b8', 1, true); // Dashed extension
+                    
+                    // The Tangent Segment (from (1,0) to (1, tan))
+                    drawLine({x: 1, y: 0}, tanPoint, '#10b981', 4); // Emerald-500
+                    
+                    // Label Tan
+                    drawText("tan", {x: 1.1, y: tanY/2}, '#059669', 'left');
+                }
+            }
+
+            // Labels
+            drawText("cos", {x: cos/2, y: -0.1}, '#1d4ed8', 'center', 'top');
+            drawText("sin", {x: cos - 0.1 * Math.sign(cos), y: sin/2}, '#be123c', 'right');
+
+            // The Point on Circle
+            const pCanvas = toCanvas(cos, sin);
+            ctx.beginPath();
+            ctx.fillStyle = '#1e293b';
+            ctx.arc(pCanvas.x, pCanvas.y, 6, 0, 2*Math.PI);
+            ctx.fill();
+        }
+
+        function updateUI() {
+            // Angle Normalization (0 to 2PI)
+            let t = theta % (2 * Math.PI);
+            if (t < 0) t += 2 * Math.PI;
+
+            const deg = (t * 180 / Math.PI).toFixed(0);
+            const rad = t.toFixed(2);
+            
+            angleDisplay.innerHTML = `${deg}&deg; / ${rad} rad`;
+
+            // Values
+            valSin.textContent = Math.sin(theta).toFixed(3);
+            valCos.textContent = Math.cos(theta).toFixed(3);
+            
+            let tanVal = Math.tan(theta);
+            if(Math.abs(tanVal) > 100) valTan.textContent = "Undefined";
+            else valTan.textContent = tanVal.toFixed(3);
+
+            // MathJax re-render if needed (lightweight here, maybe skip for performance)
+        }
+
+        // --- Interaction ---
+
+        canvas.addEventListener('mousemove', (e) => {
+            const pos = fromCanvas(e.offsetX, e.offsetY);
+            // Calculate angle from center
+            theta = Math.atan2(pos.y, pos.x);
+            
+            render();
+            updateUI();
+
+            // Tooltip
+            tooltip.style.left = (e.pageX + 15) + 'px';
+            tooltip.style.top = (e.pageY + 15) + 'px';
+            tooltip.textContent = `(${Math.cos(theta).toFixed(2)}, ${Math.sin(theta).toFixed(2)})`;
+            tooltip.style.opacity = 1;
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            tooltip.style.opacity = 0;
+        });
+
+        // Initial
+        render();
+        updateUI();
+
+    })();
+    </script>
+</body>
+</html>

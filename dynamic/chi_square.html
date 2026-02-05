@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chi-Square Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f8fafc; }
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #4f46e5;
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden flex flex-col lg:flex-row">
+        
+        <!-- Controls Panel -->
+        <div class="w-full lg:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Chi-Square Explorer</h1>
+                <p class="text-sm text-slate-500 mb-6">Goodness of Fit Test.</p>
+
+                <!-- Status Card -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold text-slate-400 uppercase">Chi-Square (\(\chi^2\))</span>
+                        <span id="val-chi" class="text-2xl font-mono font-bold text-indigo-600">0.00</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-bold text-slate-400 uppercase">P-Value</span>
+                        <span id="val-p" class="text-lg font-mono font-bold text-slate-700">1.00</span>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="space-y-6">
+                    <!-- Added ID to button and removed inline onclick -->
+                    <button id="btn-new-dist" class="w-full py-3 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition shadow-md flex items-center justify-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                        </svg>
+                        <span>New Mystery Source</span>
+                    </button>
+
+                    <!-- Sample Size -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-bold text-slate-700 text-sm">Sample Size (N)</label>
+                            <span id="val-n" class="font-mono text-indigo-600 font-bold">50</span>
+                        </div>
+                        <input type="range" id="slider-n" min="10" max="500" step="10" value="50">
+                        <p class="text-[10px] text-slate-400 mt-1">Larger samples make deviations harder to ignore.</p>
+                    </div>
+                </div>
+
+                <!-- Result Box -->
+                <div id="result-box" class="mt-8 p-4 rounded-xl border-l-4 bg-slate-100 border-slate-300 transition-colors duration-300 h-24 flex flex-col justify-center">
+                    <div id="decision-text" class="text-sm font-bold text-slate-700">
+                        Calculating...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Math Formula -->
+            <div class="mt-6 pt-4 border-t border-slate-200">
+                <p class="text-xs font-bold text-slate-400 uppercase mb-2">Formula</p>
+                <div class="text-sm text-slate-600 text-center">
+                    \[ \chi^2 = \sum \frac{(O - E)^2}{E} \]
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Panel -->
+        <div class="w-full lg:w-2/3 p-6 bg-white flex flex-col space-y-4">
+            
+            <!-- 1. Bar Chart (Observed vs Expected) -->
+            <div class="h-1/2 w-full relative">
+                <p class="absolute top-2 right-2 text-xs font-bold text-slate-400 uppercase">Observed Frequencies</p>
+                <canvas id="barCanvas"></canvas>
+            </div>
+
+            <div class="border-t border-slate-100"></div>
+
+            <!-- 2. Distribution Chart (Chi-Square PDF) -->
+            <div class="h-1/2 w-full relative">
+                <p class="absolute top-2 right-2 text-xs font-bold text-slate-400 uppercase">Null Distribution (df=2)</p>
+                <canvas id="distCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        Chart.register(window['chartjs-plugin-annotation']);
+
+        const ctxBar = document.getElementById('barCanvas').getContext('2d');
+        const ctxDist = document.getElementById('distCanvas').getContext('2d');
+        const sN = document.getElementById('slider-n');
+        const vN = document.getElementById('val-n');
+        const vChi = document.getElementById('val-chi');
+        const vP = document.getElementById('val-p');
+        const resultBox = document.getElementById('result-box');
+        const decisionText = document.getElementById('decision-text');
+        const btnNew = document.getElementById('btn-new-dist');
+
+        // Logic State
+        let n = 50;
+        let trueProbs = [1/3, 1/3, 1/3]; // Start uniform
+        let barChart, distChart;
+        
+        // Critical Value for df=2, alpha=0.05
+        // chi^2_crit = -2 * ln(0.05) = 5.991
+        const CRIT_VAL = 5.991;
+
+        // Chi-Square PDF for df=2 (Exponential Distribution)
+        // f(x) = 0.5 * exp(-x/2)
+        function chiPdf(x) {
+            if (x < 0) return 0;
+            return 0.5 * Math.exp(-x / 2);
+        }
+
+        // Chi-Square CDF for df=2
+        // F(x) = 1 - exp(-x/2)
+        function chiCdf(x) {
+            if (x < 0) return 0;
+            return 1 - Math.exp(-x / 2);
+        }
+
+        function newDistribution() {
+            // Randomize probabilities
+            // Generate 3 random numbers then normalize
+            const r1 = Math.random();
+            const r2 = Math.random();
+            const r3 = Math.random();
+            const sum = r1 + r2 + r3;
+            trueProbs = [r1/sum, r2/sum, r3/sum];
+            
+            // Visual feedback
+            resultBox.style.opacity = 0.5;
+            setTimeout(() => resultBox.style.opacity = 1, 200);
+            
+            update();
+        }
+
+        function update() {
+            n = parseInt(sN.value);
+            vN.textContent = n;
+
+            // 1. Simulate Sampling
+            const counts = [0, 0, 0];
+            for(let i=0; i<n; i++) {
+                const rand = Math.random();
+                if (rand < trueProbs[0]) counts[0]++;
+                else if (rand < trueProbs[0] + trueProbs[1]) counts[1]++;
+                else counts[2]++;
+            }
+
+            // 2. Calculate Chi-Square
+            const expected = n / 3;
+            let chiSq = 0;
+            counts.forEach(o => {
+                chiSq += Math.pow(o - expected, 2) / expected;
+            });
+
+            vChi.textContent = chiSq.toFixed(2);
+
+            // 3. P-Value
+            const pValue = 1 - chiCdf(chiSq);
+            let pText = pValue < 0.001 ? "< 0.001" : pValue.toFixed(3);
+            vP.textContent = pText;
+
+            // 4. Decision Logic
+            const baseClasses = "mt-8 p-4 rounded-xl border-l-4 transition-colors duration-300 h-24 flex flex-col justify-center";
+            if (pValue < 0.05) {
+                resultBox.className = `${baseClasses} bg-red-50 border-red-500`;
+                decisionText.innerHTML = `<span class="text-red-600 font-bold text-lg">Reject Null Hypothesis</span><br>The distribution is likely biased.`;
+            } else {
+                resultBox.className = `${baseClasses} bg-emerald-50 border-emerald-500`;
+                decisionText.innerHTML = `<span class="text-emerald-600 font-bold text-lg">Fail to Reject</span><br>Deviation could be random noise.`;
+            }
+
+            // 5. Update Charts
+            drawBarChart(counts, expected);
+            drawDistChart(chiSq);
+        }
+
+        function drawBarChart(counts, expected) {
+            const data = {
+                labels: ['Group A', 'Group B', 'Group C'],
+                datasets: [{
+                    label: 'Observed',
+                    data: counts,
+                    backgroundColor: ['#ef4444', '#3b82f6', '#10b981'], // Red, Blue, Emerald
+                    borderRadius: 4,
+                    order: 2
+                }]
+            };
+
+            if (!barChart) {
+                barChart = new Chart(ctxBar, {
+                    type: 'bar',
+                    data: data,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 200 },
+                        scales: {
+                            y: { beginAtZero: true, title: {display: true, text: 'Count'} }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            annotation: {
+                                annotations: {
+                                    lineExpected: {
+                                        type: 'line',
+                                        scaleID: 'y',
+                                        value: expected,
+                                        borderColor: '#64748b',
+                                        borderWidth: 2,
+                                        borderDash: [6, 6],
+                                        label: {
+                                            display: true,
+                                            content: 'Expected (Uniform)',
+                                            position: 'end',
+                                            backgroundColor: '#64748b',
+                                            color: 'white'
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                barChart.data.datasets[0].data = counts;
+                barChart.options.plugins.annotation.annotations.lineExpected.value = expected;
+                barChart.update();
+            }
+        }
+
+        function drawDistChart(currentChi) {
+            // Generate curve for df=2
+            const maxX = Math.max(15, currentChi + 2);
+            const labels = [];
+            const points = [];
+            const steps = 100;
+            
+            for(let i=0; i<=steps; i++) {
+                const x = (i/steps) * maxX;
+                labels.push(x.toFixed(1));
+                points.push({x: x, y: chiPdf(x)});
+            }
+
+            if (!distChart) {
+                distChart = new Chart(ctxDist, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Distribution',
+                            data: points,
+                            borderColor: '#6366f1',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true,
+                            segment: {
+                                backgroundColor: (ctx) => {
+                                    const x = ctx.p0.parsed.x;
+                                    if (x > CRIT_VAL) return 'rgba(239, 68, 68, 0.4)'; // Red tail
+                                    return 'rgba(16, 185, 129, 0.2)'; // Green body
+                                },
+                                borderColor: (ctx) => {
+                                    const x = ctx.p0.parsed.x;
+                                    if (x > CRIT_VAL) return '#ef4444';
+                                    return '#10b981';
+                                }
+                            }
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 0 },
+                        scales: {
+                            x: { 
+                                type: 'linear', 
+                                min: 0, 
+                                max: maxX,
+                                title: {display: true, text: 'Chi-Square Statistic'}
+                            },
+                            y: { display: false }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            annotation: {
+                                annotations: {
+                                    lineVal: {
+                                        type: 'line',
+                                        xMin: currentChi,
+                                        xMax: currentChi,
+                                        borderColor: '#1e293b',
+                                        borderWidth: 3,
+                                        label: {
+                                            display: true,
+                                            content: 'Your Sample',
+                                            backgroundColor: '#1e293b',
+                                            color: 'white',
+                                            position: 'start',
+                                            yAdjust: -10
+                                        }
+                                    },
+                                    lineCrit: {
+                                        type: 'line',
+                                        xMin: CRIT_VAL,
+                                        xMax: CRIT_VAL,
+                                        borderColor: '#ef4444',
+                                        borderWidth: 2,
+                                        borderDash: [4, 4],
+                                        label: {
+                                            display: true,
+                                            content: 'Critical (5%)',
+                                            position: 'end',
+                                            backgroundColor: 'transparent',
+                                            color: '#ef4444',
+                                            rotation: 90
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                distChart.data.labels = labels; // Needed for tooltips mostly
+                distChart.data.datasets[0].data = points;
+                distChart.options.scales.x.max = maxX;
+                
+                distChart.options.plugins.annotation.annotations.lineVal.xMin = currentChi;
+                distChart.options.plugins.annotation.annotations.lineVal.xMax = currentChi;
+                
+                distChart.update();
+            }
+        }
+
+        sN.addEventListener('input', update);
+        btnNew.addEventListener('click', newDistribution);
+
+        // Init
+        update();
+    })();
+    </script>
+</body>
+</html>

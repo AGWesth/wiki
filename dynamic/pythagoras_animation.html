@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Proof: Pythagorean Theorem</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script>
+        window.MathJax = {
+            loader: {load: ['[tex]/cancel']},
+            tex: {packages: {'[+]': ['cancel']}},
+            startup: {
+                pageReady: () => {
+                    return MathJax.startup.defaultPageReady();
+                }
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+        canvas {
+            touch-action: none;
+        }
+        /* Smooth slider styling */
+        input[type=range] {
+            -webkit-appearance: none; 
+            width: 100%; 
+            background: transparent; 
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #4f46e5;
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+        .math-step {
+            transition: all 0.5s ease;
+            opacity: 0.5;
+            transform: scale(0.95);
+        }
+        .math-active {
+            opacity: 1;
+            transform: scale(1);
+            background-color: #eff6ff; /* blue-50 */
+            border-left: 4px solid #4f46e5;
+            padding-left: 1rem;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-6xl overflow-hidden flex flex-col md:flex-row">
+        
+        <!-- Controls Panel -->
+        <div class="w-full md:w-2/5 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between overflow-y-auto max-h-[90vh]">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Pythagorean Proof</h1>
+                <p class="text-sm text-slate-500 mb-6">Visual + Algebraic Demonstration.</p>
+
+                <!-- Slider Control -->
+                <div class="mb-8 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex justify-between mb-2">
+                        <label class="text-sm font-bold text-slate-700">Rearrange Shapes</label>
+                        <span id="pct-display" class="text-xs font-mono text-indigo-600">0%</span>
+                    </div>
+                    <input type="range" id="anim-slider" min="0" max="100" value="0" step="0.5">
+                    
+                    <button id="btn-animate" class="mt-4 w-full py-2 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition shadow-md text-sm">
+                        Play Proof
+                    </button>
+                </div>
+
+                <!-- Algebraic Logic Container -->
+                <div class="space-y-4">
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Algebraic Derivation</p>
+
+                    <!-- Step 1: Total Area -->
+                    <div id="step-1" class="math-step p-2 rounded">
+                        <p class="text-xs text-slate-500 mb-1">Total Square Area</p>
+                        <div class="text-sm font-mono text-slate-800">
+                            \[ (a+b)^2 = a^2 + b^2 + 2ab \]
+                        </div>
+                    </div>
+
+                    <!-- Step 2: State 1 -->
+                    <div id="step-2" class="math-step p-2 rounded">
+                        <p class="text-xs text-slate-500 mb-1">State 1 (Start)</p>
+                        <div class="text-sm font-mono text-slate-800">
+                            \[ \text{Area} = c^2 + \mathbf{4(\frac{1}{2}ab)} \]
+                            \[ \text{Area} = c^2 + \mathbf{2ab} \]
+                        </div>
+                    </div>
+
+                    <!-- Step 3: State 2 -->
+                    <div id="step-3" class="math-step p-2 rounded">
+                        <p class="text-xs text-slate-500 mb-1">State 2 (End)</p>
+                        <div class="text-sm font-mono text-slate-800">
+                            \[ \text{Area} = a^2 + b^2 + \mathbf{2ab} \]
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Conclusion -->
+                    <div id="step-4" class="math-step p-2 rounded bg-emerald-50 border border-emerald-100">
+                        <p class="text-xs text-emerald-600 font-bold mb-1">Conclusion</p>
+                        <div class="text-sm font-mono text-emerald-800">
+                            \[ a^2 + b^2 + \bcancel{2ab} = c^2 + \bcancel{2ab} \]
+                            \[ \boldsymbol{a^2 + b^2 = c^2} \]
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Canvas Panel -->
+        <div class="w-full md:w-3/5 p-4 bg-white relative flex items-center justify-center bg-grid-slate-100">
+            <canvas id="proofCanvas" width="600" height="600" class="w-full h-auto max-w-[500px] rounded-lg shadow-inner bg-slate-50 border border-slate-200"></canvas>
+            
+            <!-- Floating labels -->
+            <div id="label-state" class="absolute top-6 right-6 text-slate-400 font-mono text-xs border border-slate-200 bg-white px-2 py-1 rounded shadow-sm">
+                \( Area = c^2 + 2ab \)
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const canvas = document.getElementById('proofCanvas');
+        const ctx = canvas.getContext('2d');
+        const slider = document.getElementById('anim-slider');
+        const pctDisplay = document.getElementById('pct-display');
+        const btnAnimate = document.getElementById('btn-animate');
+        const labelState = document.getElementById('label-state');
+
+        // Steps DOM
+        const steps = [
+            document.getElementById('step-1'),
+            document.getElementById('step-2'),
+            document.getElementById('step-3'),
+            document.getElementById('step-4')
+        ];
+
+        // Geometry Config
+        // We use a 400x400 logical grid scaled to canvas
+        const a = 150; // Short leg
+        const b = 250; // Long leg
+        const total = a + b; // 400
+        const scale = canvas.width / total; 
+
+        // Animation State
+        let progress = 0; // 0.0 to 1.0
+        let isPlaying = false;
+
+        // Easing
+        function easeInOutCubic(t) {
+            return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        }
+
+        function toCanvas(x, y) {
+            return { x: x * scale, y: y * scale };
+        }
+
+        // Triangle Definition
+        class Triangle {
+            constructor(color, p1Start, p2Start, p3Start, p1End, p2End, p3End) {
+                this.color = color;
+                // Start Vertices
+                this.s1 = p1Start; this.s2 = p2Start; this.s3 = p3Start;
+                // End Vertices
+                this.e1 = p1End;   this.e2 = p2End;   this.e3 = p3End;
+            }
+
+            draw(ctx, t) {
+                // Lerp vertices
+                const p1 = this.lerp(this.s1, this.e1, t);
+                const p2 = this.lerp(this.s2, this.e2, t);
+                const p3 = this.lerp(this.s3, this.e3, t);
+
+                const c1 = toCanvas(p1.x, p1.y);
+                const c2 = toCanvas(p2.x, p2.y);
+                const c3 = toCanvas(p3.x, p3.y);
+
+                ctx.fillStyle = this.color;
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                
+                ctx.beginPath();
+                ctx.moveTo(c1.x, c1.y);
+                ctx.lineTo(c2.x, c2.y);
+                ctx.lineTo(c3.x, c3.y);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            lerp(start, end, t) {
+                return {
+                    x: start.x + (end.x - start.x) * t,
+                    y: start.y + (end.y - start.y) * t
+                };
+            }
+        }
+
+        // Define the 4 Triangles
+        const triangles = [
+            // T1 (Top-Left): Stays put
+            new Triangle('#6366f1', // Indigo
+                {x:0, y:0}, {x:a, y:0}, {x:0, y:b}, // Start
+                {x:0, y:0}, {x:a, y:0}, {x:0, y:b}  // End (Same)
+            ),
+            // T2 (Top-Right): Slides Down
+            new Triangle('#8b5cf6', // Violet
+                {x:total, y:0}, {x:total, y:a}, {x:total-b, y:0}, // Start (Corner)
+                {x:total, y:b}, {x:total, y:total}, {x:total-b, y:b} // End (Shift y + b aka 250)
+            ),
+            // T3 (Bottom-Right): Slides Left & Up
+            new Triangle('#ec4899', // Pink
+                {x:total, y:total}, {x:total-a, y:total}, {x:total, y:total-b}, // Start (Corner)
+                {x:a, y:b}, {x:0, y:b}, {x:a, y:0} // End (Matches T1 to make rect)
+            ),
+            // T4 (Bottom-Left): Slides Right
+            new Triangle('#06b6d4', // Cyan
+                {x:0, y:total}, {x:0, y:total-a}, {x:b, y:total}, // Start
+                {x:a, y:total}, {x:a, y:total-a}, {x:total, y:total} // End (Shift x + a aka 150)
+            )
+        ];
+
+        function drawBackgroundHighlights(t) {
+            // Draw c^2 (Start State)
+            if (t < 0.8) {
+                ctx.globalAlpha = 1 - t * 1.5; // Fade out
+                ctx.fillStyle = '#fef08a'; // Yellow-200
+                ctx.beginPath();
+                let p1 = toCanvas(a, 0);
+                let p2 = toCanvas(total, a);
+                let p3 = toCanvas(b, total);
+                let p4 = toCanvas(0, b);
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.lineTo(p3.x, p3.y);
+                ctx.lineTo(p4.x, p4.y);
+                ctx.fill();
+                
+                // Text c^2
+                ctx.globalAlpha = 1 - t * 2;
+                if(ctx.globalAlpha > 0) {
+                    ctx.fillStyle = '#b45309'; // Yellow-700
+                    ctx.font = 'bold 30px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    let center = toCanvas(total/2, total/2);
+                    ctx.save();
+                    ctx.translate(center.x, center.y);
+                    ctx.rotate(Math.asin(a/Math.sqrt(a*a+b*b))); 
+                    ctx.fillText("c²", 0, 0);
+                    ctx.restore();
+                }
+            }
+
+            // Draw a^2 and b^2 (End State)
+            if (t > 0.2) {
+                ctx.globalAlpha = (t - 0.2) * 1.5; // Fade in
+                
+                // a^2 (Bottom-Left)
+                ctx.fillStyle = '#fecdd3'; // Rose-200
+                let aRect = toCanvas(0, b);
+                let aSize = a * scale;
+                ctx.fillRect(aRect.x, aRect.y, aSize, aSize);
+
+                // b^2 (Top-Right)
+                ctx.fillStyle = '#bae6fd'; // Sky-200
+                let bRect = toCanvas(a, 0);
+                let bSize = b * scale;
+                ctx.fillRect(bRect.x, bRect.y, bSize, bSize);
+
+                // Text
+                ctx.fillStyle = '#e11d48'; // Rose-600
+                ctx.font = 'bold 30px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText("a²", aRect.x + aSize/2, aRect.y + aSize/2);
+                
+                ctx.fillStyle = '#0284c7'; // Sky-600
+                ctx.fillText("b²", bRect.x + bSize/2, bRect.y + bSize/2);
+            }
+            
+            ctx.globalAlpha = 1.0;
+        }
+
+        function updateMathState(t) {
+            // Reset active classes
+            steps.forEach(s => s.classList.remove('math-active'));
+
+            let latexLabel = "";
+
+            if (t < 0.2) {
+                // Phase 1: Total Area / Start
+                steps[0].classList.add('math-active');
+                steps[1].classList.add('math-active');
+                latexLabel = `Area = c^2 + 2ab`;
+            } else if (t >= 0.2 && t < 0.8) {
+                // Phase 2: Moving
+                latexLabel = `... Rearranging ...`;
+            } else if (t >= 0.8 && t < 1.0) {
+                // Phase 3: Arrived at End
+                steps[2].classList.add('math-active');
+                latexLabel = `Area = a^2 + b^2 + 2ab`;
+            } else {
+                // Phase 4: Conclusion (t=1.0)
+                steps[3].classList.add('math-active');
+                latexLabel = `a^2 + b^2 = c^2`;
+            }
+
+            labelState.innerHTML = `\\( ${latexLabel} \\)`;
+            
+            // Fix: Check if MathJax is ready and has the function
+            if(window.MathJax && typeof window.MathJax.typesetPromise === 'function') {
+                MathJax.typesetPromise([labelState]).catch(err => console.log('MathJax error:', err));
+            }
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Draw Outer Border
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(0, 0, canvas.width, canvas.height);
+
+            const t = easeInOutCubic(progress);
+
+            // 2. Draw Backgrounds
+            drawBackgroundHighlights(t);
+
+            // 3. Draw Triangles
+            triangles.forEach(tri => tri.draw(ctx, t));
+
+            // 4. Update Math UI
+            updateMathState(t);
+        }
+
+        // --- Loop & Interaction ---
+
+        function update() {
+            progress = parseFloat(slider.value) / 100;
+            pctDisplay.textContent = Math.round(progress * 100) + "%";
+            render();
+        }
+
+        slider.addEventListener('input', () => {
+            isPlaying = false; 
+            btnAnimate.textContent = "Play Proof";
+            update();
+        });
+
+        // Animation Loop
+        let direction = 1;
+        function animateStep() {
+            if(!isPlaying) return;
+
+            let val = parseFloat(slider.value);
+            // Slower animation for readability
+            if (direction === 1) {
+                val += 0.4; 
+                if(val >= 100) {
+                    val = 100;
+                    isPlaying = false;
+                    btnAnimate.textContent = "Reset";
+                    direction = -1;
+                }
+            } else {
+                val -= 1.5; 
+                if(val <= 0) {
+                    val = 0;
+                    isPlaying = false;
+                    btnAnimate.textContent = "Play Proof";
+                    direction = 1;
+                }
+            }
+            
+            slider.value = val;
+            update();
+            requestAnimationFrame(animateStep);
+        }
+
+        btnAnimate.addEventListener('click', () => {
+            if (parseFloat(slider.value) >= 100) {
+                slider.value = 0;
+                direction = 1;
+            }
+            isPlaying = true;
+            btnAnimate.textContent = "Playing...";
+            animateStep();
+        });
+
+        // Initial Draw
+        // Use timeout to allow MathJax to load
+        setTimeout(update, 500);
+
+    })();
+    </script>
+</body>
+</html>

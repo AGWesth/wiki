@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collision Explorer: Newton's 3rd Law</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f8fafc; }
+        canvas { touch-action: none; }
+        /* Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #ea580c; /* Orange-600 */
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-5xl overflow-hidden flex flex-col lg:flex-row border border-slate-100">
+        
+        <!-- Controls Panel -->
+        <div class="w-full lg:w-1/3 p-8 bg-slate-50 border-r border-slate-100 flex flex-col justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 mb-2">Impact & 3rd Law</h1>
+                <p class="text-sm text-slate-500 mb-6">Action = -Reaction during Collision.</p>
+
+                <!-- Status Card -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold text-slate-400 uppercase">Impact Force</span>
+                        <span id="val-force" class="text-xl font-mono font-bold text-rose-600">0 N</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2">
+                        <div id="bar-force" class="bg-rose-500 h-2 rounded-full transition-all duration-75" style="width: 0%"></div>
+                    </div>
+                    <p id="status-text" class="text-xs text-slate-400 mt-2 italic">Ball is falling...</p>
+                </div>
+
+                <!-- Controls -->
+                <div class="space-y-6">
+                    <!-- Drop Height -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-bold text-slate-700 text-sm">Drop Height</label>
+                            <span id="val-height" class="font-mono text-slate-600 font-bold">5 m</span>
+                        </div>
+                        <input type="range" id="slider-height" min="1" max="10" step="1" value="5">
+                    </div>
+
+                    <!-- Mass -->
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <label class="font-bold text-slate-700 text-sm">Ball Mass</label>
+                            <span id="val-mass" class="font-mono text-slate-600 font-bold">1.0 kg</span>
+                        </div>
+                        <input type="range" id="slider-mass" min="0.5" max="5.0" step="0.5" value="1.0">
+                    </div>
+
+                    <button id="btn-drop" class="w-full py-3 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition shadow-md flex items-center justify-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3.586L7.707 9.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 10.586V7z" clip-rule="evenodd" />
+                        </svg>
+                        <span>Drop Ball</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Teaching Note -->
+            <div class="mt-8 pt-6 border-t border-slate-200">
+                <p class="text-xs font-bold text-slate-400 uppercase mb-2">Concept</p>
+                <div class="text-sm text-slate-600 leading-relaxed">
+                    <p class="mb-2">While touching the ground, the ball compresses like a spring.</p>
+                    <p>It exerts force <span class="text-rose-600 font-bold">Down</span> on the Earth.</p>
+                    <p>The Earth exerts an equal force <span class="text-rose-600 font-bold">Up</span> on the ball.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Canvas Panel -->
+        <div class="w-full lg:w-2/3 p-0 relative bg-slate-900 flex items-center justify-center overflow-hidden h-[500px]">
+            <canvas id="simCanvas" class="w-full h-full block"></canvas>
+            
+            <div class="absolute top-4 right-4 text-white/50 text-xs font-mono">
+                <span id="speed-indicator">1.0x Speed</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // UI
+        const sHeight = document.getElementById('slider-height');
+        const sMass = document.getElementById('slider-mass');
+        const vHeight = document.getElementById('val-height');
+        const vMass = document.getElementById('val-mass');
+        const vForce = document.getElementById('val-force');
+        const barForce = document.getElementById('bar-force');
+        const statusText = document.getElementById('status-text');
+        const btnDrop = document.getElementById('btn-drop');
+        const speedInd = document.getElementById('speed-indicator');
+
+        // Physics Constants
+        const g = 9.81;
+        const groundY = 400; // Pixel Y position of ground
+        const scale = 40; // Pixels per meter
+        const dtBase = 1/60;
+        
+        // State
+        let mass = 1.0;
+        let radius = 25; // Visual radius
+        let pos = { x: 0, y: 0 };
+        let vel = 0;
+        let isDropping = false;
+        let springK = 3000; // Stiffness of ball
+        
+        let currentForce = 0;
+        let maxForceObserved = 0;
+        let timeScale = 1.0; // For slow motion
+
+        function resize() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight || 500;
+            pos.x = canvas.width / 2;
+            reset();
+        }
+        window.addEventListener('resize', resize);
+
+        function reset() {
+            const h = parseInt(sHeight.value);
+            pos.y = groundY - (h * scale); // Start height
+            vel = 0;
+            currentForce = 0;
+            isDropping = false;
+            statusText.textContent = "Ready to drop.";
+            timeScale = 1.0;
+            draw();
+        }
+
+        function update() {
+            if (!isDropping) return;
+
+            let dt = dtBase * timeScale;
+            
+            // 1. Gravity
+            vel += g * dt;
+            pos.y += vel * dt * scale;
+
+            // 2. Ground Collision Check
+            // Calculate bottom of ball
+            const ballBottom = pos.y + radius;
+            
+            if (ballBottom > groundY) {
+                // COLLISION DETECTED
+                
+                // Slow Motion Effect
+                timeScale = 0.1; 
+                statusText.textContent = "Impact! (Slow Motion)";
+                speedInd.textContent = "0.1x Speed";
+                speedInd.className = "text-yellow-400 font-bold";
+
+                // Spring Force (Hooke's Law): F = -kx
+                const penetration = (ballBottom - groundY) / scale; // in meters
+                const springForce = springK * penetration; // Force upwards
+                
+                // Dampening (Energy loss during compression)
+                // Corrected: Add damping to the spring force.
+                // When moving DOWN (v > 0), damping resists (ADDs to total upward normal force needed to stop it).
+                // When moving UP (v < 0), damping resists (SUBTRACTS from spring push).
+                const dampingForce = vel * 20; 
+
+                const totalForce = Math.max(0, springForce + dampingForce); 
+                
+                currentForce = totalForce;
+                if (currentForce > maxForceObserved) maxForceObserved = currentForce;
+
+                // Apply Force to Ball: a = F/m (Upwards is negative in this Y-down canvas system?)
+                // Wait, standard physics: Up is positive usually.
+                // Here: Y increases downwards.
+                // Gravity (g) adds to vel. So vel increases (down).
+                // Collision force should be UP (Negative Y).
+                // Magnitude totalForce is correct. Direction is Up.
+                const acc = -totalForce / mass;
+                vel += acc * dt;
+
+            } else {
+                // In Air
+                timeScale = 1.0;
+                currentForce = 0;
+                if (vel > 0) statusText.textContent = "Falling...";
+                else if (vel < 0) statusText.textContent = "Bouncing up...";
+                speedInd.textContent = "1.0x Speed";
+                speedInd.className = "text-white/50";
+            }
+
+            // Stop bouncing if low energy
+            if (Math.abs(vel) < 0.1 && pos.y > groundY - radius - 2 && currentForce < mass*g*1.1) {
+                // Settle
+                pos.y = groundY - radius;
+                vel = 0;
+                currentForce = mass * g; // Resting weight
+                isDropping = false;
+                statusText.textContent = "Resting.";
+            }
+        }
+
+        function drawBall(x, y, r, compression) {
+            ctx.save();
+            ctx.translate(x, y);
+            
+            // Squash scaling
+            // compression is pixels. If compression is 10px, height should be r-10.
+            const squashFactor = Math.max(0.6, (r - compression) / r);
+            const stretchFactor = 1 + (1 - squashFactor) * 0.5; // Conserve volume roughly
+            
+            ctx.scale(stretchFactor, squashFactor);
+
+            // Ball Body (Orange)
+            const grad = ctx.createRadialGradient(-5, -5, 5, 0, 0, r);
+            grad.addColorStop(0, '#fdba74'); // Light orange
+            grad.addColorStop(1, '#ea580c'); // Dark orange
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, Math.PI*2);
+            ctx.fill();
+
+            // Basketball Lines
+            ctx.strokeStyle = '#7c2d12'; // Dark brown
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, -r);
+            ctx.bezierCurveTo(r, -r/2, r, r/2, 0, r);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(-r, 0);
+            ctx.lineTo(r, 0);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function drawVectors(x, y, force) {
+            if (force < 1) return;
+
+            // Visual Scale for vector length
+            const len = Math.min(150, force * 0.2); 
+            const offset = 20;
+
+            // 1. Action: Ball pushes Ground (Down)
+            // Draw slightly below contact point
+            drawArrow(x + offset, groundY + 5, x + offset, groundY + 5 + len, '#e11d48', "F(Ball on Ground)");
+
+            // 2. Reaction: Ground pushes Ball (Up)
+            // Draw slightly above contact point
+            drawArrow(x - offset, groundY - 5, x - offset, groundY - 5 - len, '#e11d48', "F(Ground on Ball)");
+        }
+
+        function drawArrow(x1, y1, x2, y2, color, label) {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 4;
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            const angle = Math.atan2(y2 - y1, x2 - x1);
+            const headLen = 10;
+            ctx.beginPath();
+            ctx.moveTo(x2, y2);
+            ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI/6), y2 - headLen * Math.sin(angle - Math.PI/6));
+            ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI/6), y2 - headLen * Math.sin(angle + Math.PI/6));
+            ctx.fillStyle = color;
+            ctx.fill();
+
+            // Label
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.textAlign = 'center';
+            // Offset text based on direction
+            const textY = y2 + (y2 > y1 ? 15 : -15);
+            ctx.fillText(label, x2, textY);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Ground
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, groundY);
+            ctx.lineTo(canvas.width, groundY);
+            ctx.stroke();
+
+            // Compression calc for drawing
+            let compression = 0;
+            if (pos.y + radius > groundY) {
+                compression = (pos.y + radius) - groundY;
+            }
+
+            drawBall(pos.x, pos.y, radius, compression);
+
+            // Vectors
+            drawVectors(pos.x, pos.y, currentForce);
+
+            // UI Update
+            vForce.textContent = Math.round(currentForce) + " N";
+            // Bar scales to max observed (dynamic) or fixed cap (e.g., 2000N)
+            const maxScale = 2000 * mass; 
+            barForce.style.width = Math.min(100, (currentForce / maxScale) * 100) + "%";
+        }
+
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        // Inputs
+        sHeight.addEventListener('input', () => {
+            vHeight.textContent = sHeight.value + " m";
+            if (!isDropping) reset();
+        });
+        sMass.addEventListener('input', () => {
+            mass = parseFloat(sMass.value);
+            vMass.textContent = mass.toFixed(1) + " kg";
+            // Scale radius slightly with mass
+            radius = 25 + (mass-1)*5;
+        });
+
+        btnDrop.addEventListener('click', () => {
+            reset();
+            isDropping = true;
+        });
+
+        // Init
+        resize();
+        loop();
+
+    })();
+    </script>
+</body>
+</html>
