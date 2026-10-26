@@ -43,15 +43,18 @@
         <div id="status-message" class="absolute top-12 left-1/2 -translate-x-1/2 bg-white/90 px-5 py-2 rounded-full font-semibold text-sm md:text-base text-slate-500 shadow-md text-center whitespace-nowrap z-10 pointer-events-none transition-colors">
             Klar til at spille...
         </div>
-        <div id="score-display" class="absolute top-4 right-4 bg-white/90 px-3 py-1 rounded-lg font-bold text-slate-700 shadow z-10 pointer-events-none">
-            Score: <span id="score-val">0</span>
+        <div id="score-display" class="absolute top-4 right-4 bg-white/90 px-3 py-1 rounded-lg font-bold text-slate-700 shadow z-10 pointer-events-none text-right">
+            <div>Score: <span id="score-val">0</span></div>
+            <div class="text-purple-600 text-sm font-semibold">Bander: <span id="bande-val">0</span></div>
         </div>
 
         <!-- Simpel Game Over Skærm -->
         <div id="game-over-screen" class="hidden absolute inset-0 bg-slate-900/95 flex-col items-center justify-center text-white z-50">
             <h2 class="text-3xl md:text-4xl font-semibold mb-2 text-center">Du klarede</h2>
             <div id="final-score" class="text-8xl md:text-9xl font-black text-blue-400 mb-2">0</div>
-            <h2 class="text-2xl md:text-3xl font-semibold mb-10 text-center">Pasninger!<br><span class="text-green-400 text-xl md:text-2xl">Godt gået!</span></h2>
+            <h2 class="text-2xl md:text-3xl font-semibold mb-4 text-center">Pasninger!</h2>
+            
+            <h3 class="text-xl md:text-2xl text-purple-400 mb-10 text-center">Og <span id="final-bande" class="font-bold text-3xl">0</span> Bandespil!</h3>
             
             <button onpointerdown="restartGame(event)" class="bg-blue-600 active:bg-blue-700 text-white font-bold py-4 px-10 rounded-full shadow-lg text-xl pointer-events-auto select-none touch-none">
                 Spil igen
@@ -78,8 +81,12 @@
         let passTimer = 0;
 
         let score = 0;
+        let bandespilCount = 0; // Tæller til bandespil
+        let lastPass = null; // Gemmer forrige afleverings start og slut
+        let currentTriangle = null; // Gemmer den visuelle trekant
+        let triangleAlpha = 0; // Alpha værdi til at fade trekanten ud
         let defenderSpeed = 0.5;
-        const speedIncrement = 0.1; // Øget en smule mere så de hurtigere mærker presset
+        const speedIncrement = 0.08; // Øget en smule mere så de hurtigere mærker presset
 
         // Entities
         let entities = [];
@@ -110,6 +117,10 @@
             receiverLastPos = { x: initialReceiver.x, y: initialReceiver.y };
             
             score = 0;
+            bandespilCount = 0;
+            lastPass = null;
+            currentTriangle = null;
+            triangleAlpha = 0;
             defenderSpeed = 0.5;
             updateScoreDisplay();
 
@@ -118,7 +129,9 @@
 
         function updateScoreDisplay() {
             const scoreVal = document.getElementById('score-val');
+            const bandeVal = document.getElementById('bande-val');
             if (scoreVal) scoreVal.innerText = score;
+            if (bandeVal) bandeVal.innerText = bandespilCount;
         }
 
         function resizeCanvas() {
@@ -167,6 +180,16 @@
             return distToLine > r;
         }
 
+        // Math: Tjek om forsvarsspilleren (p) er fanget inde i trekanten (a,b,c)
+        function isPointInTriangle(p, a, b, c) {
+            let d1 = (p.x - b.x) * (a.y - b.y) - (a.x - b.x) * (p.y - b.y);
+            let d2 = (p.x - c.x) * (b.y - c.y) - (b.x - c.x) * (p.y - c.y);
+            let d3 = (p.x - a.x) * (c.y - a.y) - (c.x - a.x) * (p.y - a.y);
+            let has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+            let has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+            return !(has_neg && has_pos);
+        }
+
         function setStatus(msg, colorType) {
             statusMsg.textContent = msg;
             statusMsg.className = `absolute top-12 left-1/2 -translate-x-1/2 bg-white/90 px-5 py-2 rounded-full font-semibold text-sm md:text-base text-${colorType}-600 shadow-md text-center whitespace-nowrap z-10 pointer-events-none transition-colors`;
@@ -206,8 +229,11 @@
         function showGameOver() {
             const gameOverScreen = document.getElementById('game-over-screen');
             const finalScoreSpan = document.getElementById('final-score');
+            const finalBandeSpan = document.getElementById('final-bande');
             
             finalScoreSpan.innerText = score;
+            if (finalBandeSpan) finalBandeSpan.innerText = bandespilCount;
+            
             gameOverScreen.classList.remove('hidden');
             gameOverScreen.classList.add('flex');
             
@@ -254,6 +280,33 @@
                         
                         score++;
                         defenderSpeed += speedIncrement;
+                        
+                        // --- Bandespil Logik ---
+                        let newPassStart = { x: passLine.start.x, y: passLine.start.y };
+                        let newPassEnd = { x: passLine.end.x, y: passLine.end.y };
+                        
+                        if (lastPass) {
+                            let A = lastPass.start; // Hvor første aflevering startede
+                            let B = newPassStart;   // Hvor anden aflevering startede (slutningen af første)
+                            let C = newPassEnd;     // Hvor anden aflevering sluttede
+                            let P = { x: defender.x, y: defender.y };
+                            
+                            // Tjekker om forsvareren er fanget i midten
+                            if (isPointInTriangle(P, A, B, C)) {
+                                bandespilCount++;
+                                currentTriangle = { A, B, C };
+                                triangleAlpha = 1.0; // Sætter alpha til max så den starter med at fade ud
+                                setStatus('Flot 1-2 Bandespil! 🔥', 'purple');
+                            } else {
+                                setStatus('Godt spillet! Hvor skal du nu løbe hen?', 'blue');
+                            }
+                        } else {
+                            setStatus('Godt spillet! Hvor skal du nu løbe hen?', 'blue');
+                        }
+                        
+                        // Gem nuværende aflevering til næste gang
+                        lastPass = { start: newPassStart, end: newPassEnd };
+
                         updateScoreDisplay();
 
                         // Nulstil omgængående så der kan spilles videre uden pause
@@ -335,6 +388,12 @@
                     }
                 }
             }
+            
+            // Fade den lilla bandespil-trekant langsomt ud
+            if (triangleAlpha > 0) {
+                triangleAlpha -= 0.015;
+                if (triangleAlpha < 0) triangleAlpha = 0;
+            }
         }
 
         function draw() {
@@ -379,6 +438,27 @@
                 ctx.setLineDash([5, 5]);
                 ctx.stroke();
                 ctx.setLineDash([]); // Reset
+            }
+
+            // 3.5 Draw Bandespil Trekant (hvis den er aktiv og ikke helt fadet ud)
+            if (currentTriangle && triangleAlpha > 0) {
+                let A = currentTriangle.A, B = currentTriangle.B, C = currentTriangle.C;
+                ctx.beginPath();
+                ctx.moveTo(A.x * scale, A.y * scale);
+                ctx.lineTo(B.x * scale, B.y * scale);
+                ctx.lineTo(C.x * scale, C.y * scale);
+                ctx.closePath();
+                
+                // Lilla gennemsigtig fyld
+                ctx.fillStyle = `rgba(168, 85, 247, ${triangleAlpha * 0.15})`;
+                ctx.fill();
+                
+                // Lilla stiplet kant
+                ctx.strokeStyle = `rgba(168, 85, 247, ${triangleAlpha})`;
+                ctx.lineWidth = 2 * scale;
+                ctx.setLineDash([8, 6]);
+                ctx.stroke();
+                ctx.setLineDash([]);
             }
 
             // 4. Draw entities
