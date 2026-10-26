@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aktion på Aktion - U10/U11 Piger</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #22c55e;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Undgå scrolling på mobil */
+            touch-action: none;
+        }
+        
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+            background-color: #22c55e;
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <div id="canvas-container">
+        <div id="status-message" class="absolute top-12 left-1/2 -translate-x-1/2 bg-white/90 px-5 py-2 rounded-full font-semibold text-sm md:text-base text-slate-500 shadow-md text-center whitespace-nowrap z-10 pointer-events-none transition-colors">
+            Klar til at spille...
+        </div>
+        <div id="score-display" class="absolute top-4 right-4 bg-white/90 px-3 py-1 rounded-lg font-bold text-slate-700 shadow z-10 pointer-events-none">
+            Score: <span id="score-val">0</span>
+        </div>
+        <canvas id="pitch"></canvas>
+        <button id="pass-btn" class="absolute bottom-10 right-6 md:right-10 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-5 px-10 text-xl md:text-2xl rounded-full shadow-2xl border-4 border-white transition-transform active:scale-90 z-20 select-none touch-none" style="-webkit-tap-highlight-color: transparent; touch-action: none;">
+            Aflever ⚽
+        </button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('pitch');
+        const ctx = canvas.getContext('2d');
+        const passBtn = document.getElementById('pass-btn');
+        const statusMsg = document.getElementById('status-message');
+
+        // Logic variables
+        let width, height;
+        let scale = 1; // Used for responsive rendering
+        const BASE_SIZE = 600; 
+        
+        let animationFrameId;
+        let isPassing = false;
+        let passLine = null; // {start, end, progress, success}
+        let passTimer = 0;
+
+        let score = 0;
+        let defenderSpeed = 0.5;
+        const speedIncrement = 0.005;
+
+        // Entities
+        let entities = [];
+        let attacker1, attacker2, defender, ball;
+        let draggingEntity = null;
+
+        function initEntities() {
+            // Define standard coordinates based on a 600x600 board
+            attacker1 = { id: 'a1', type: 'attacker', x: 300, y: 500, radius: 20, color: '#3b82f6', hasBall: true };
+            attacker2 = { id: 'a2', type: 'attacker', x: 150, y: 300, radius: 20, color: '#3b82f6', hasBall: false };
+            defender = { id: 'd1', type: 'defender', x: 300, y: 150, radius: 20, color: '#ef4444', interceptionZone: 60 };
+            
+            ball = { x: attacker1.x, y: attacker1.y - 25, radius: 8, owner: attacker1 };
+
+            entities = [attacker1, attacker2, defender];
+            isPassing = false;
+            passLine = null;
+            
+            score = 0;
+            defenderSpeed = 0.5;
+            updateScoreDisplay();
+
+            setStatus('Klar til at spille...', 'slate');
+        }
+
+        function updateScoreDisplay() {
+            const scoreVal = document.getElementById('score-val');
+            if (scoreVal) scoreVal.innerText = score;
+        }
+
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            width = container.clientWidth;
+            height = container.clientHeight;
+            canvas.width = width;
+            canvas.height = height;
+            scale = width / BASE_SIZE;
+        }
+
+        // Math: Check line-circle intersection
+        // Returns true if clear (no intersection), false if blocked
+        function isPassClear(A, B, C, r) {
+            let dx = B.x - A.x;
+            let dy = B.y - A.y;
+            let len = Math.sqrt(dx*dx + dy*dy);
+            
+            if (len === 0) return false;
+
+            let dot = ( ((C.x - A.x)*dx) + ((C.y - A.y)*dy) ) / (len*len);
+            
+            let closestX = A.x + (dot * dx);
+            let closestY = A.y + (dot * dy);
+
+            // Is closest point on the line segment?
+            let onSegment = false;
+            let buffer = 0.1;
+            let minX = Math.min(A.x, B.x) - buffer;
+            let maxX = Math.max(A.x, B.x) + buffer;
+            let minY = Math.min(A.y, B.y) - buffer;
+            let maxY = Math.max(A.y, B.y) + buffer;
+
+            if (closestX >= minX && closestX <= maxX && closestY >= minY && closestY <= maxY) {
+                onSegment = true;
+            }
+
+            if (!onSegment) {
+                // If not on segment, check distance to endpoints
+                let distA = Math.hypot(C.x - A.x, C.y - A.y);
+                let distB = Math.hypot(C.x - B.x, C.y - B.y);
+                return Math.min(distA, distB) > r;
+            }
+
+            let distToLine = Math.hypot(C.x - closestX, C.y - closestY);
+            return distToLine > r;
+        }
+
+        function setStatus(msg, colorType) {
+            statusMsg.textContent = msg;
+            statusMsg.className = `absolute top-12 left-1/2 -translate-x-1/2 bg-white/90 px-5 py-2 rounded-full font-semibold text-sm md:text-base text-${colorType}-600 shadow-md text-center whitespace-nowrap z-10 pointer-events-none transition-colors`;
+        }
+
+        function handlePass() {
+            if (isPassing) return;
+            
+            // Find who has the ball and who receives
+            let passer = attacker1.hasBall ? attacker1 : attacker2;
+            let receiver = attacker1.hasBall ? attacker2 : attacker1;
+
+            let startPoint = { x: passer.x, y: passer.y };
+            let endPoint = { x: receiver.x, y: receiver.y };
+            let defenderCenter = { x: defender.x, y: defender.y };
+            
+            // Check if pass is successful
+            let success = isPassClear(startPoint, endPoint, defenderCenter, defender.interceptionZone);
+
+            isPassing = true;
+            passLine = {
+                start: startPoint,
+                end: endPoint,
+                progress: 0,
+                success: success,
+                passer: passer,
+                receiver: receiver
+            };
+
+            if (success) {
+                setStatus('God aflevering! Stærkt løbet.', 'green');
+            } else {
+                setStatus('Blokeret! Find en bedre vinkel.', 'red');
+            }
+        }
+
+        function update() {
+            // Handle animation logic
+            if (isPassing && passLine) {
+                passLine.progress += 0.03; // Animation speed
+
+                if (passLine.progress >= 1) {
+                    passLine.progress = 1;
+                    
+                    if (passLine.success) {
+                        // Transfer ball
+                        passLine.passer.hasBall = false;
+                        passLine.receiver.hasBall = true;
+                        ball.owner = passLine.receiver;
+                        // Snap ball to owner
+                        ball.x = ball.owner.x;
+                        ball.y = ball.owner.y - 25;
+                        
+                        score++;
+                        defenderSpeed += speedIncrement;
+                        updateScoreDisplay();
+
+                        setTimeout(() => {
+                            isPassing = false;
+                            passLine = null;
+                            setStatus('Godt spillet! Hvor skal du nu løbe hen?', 'blue');
+                        }, 1500);
+                    } else {
+                        // Fail animation stops at interception radius
+                        let dx = passLine.end.x - passLine.start.x;
+                        let dy = passLine.end.y - passLine.start.y;
+                        
+                        // Roughly place ball near defender
+                        ball.x = passLine.start.x + dx * 0.5;
+                        ball.y = passLine.start.y + dy * 0.5;
+
+                        score = 0;
+                        defenderSpeed = 0.5;
+                        updateScoreDisplay();
+
+                        setTimeout(() => {
+                            initEntities();
+                            setStatus('Pasning brudt! Spillet er genstartet.', 'orange');
+                        }, 1500);
+                    }
+                } else {
+                    // Move ball during animation
+                    let targetX = passLine.start.x + (passLine.end.x - passLine.start.x) * passLine.progress;
+                    let targetY = passLine.start.y + (passLine.end.y - passLine.start.y) * passLine.progress;
+                    ball.x = targetX;
+                    ball.y = targetY;
+                }
+            } else if (!isPassing && ball.owner) {
+                // Ball follows owner
+                ball.x = ball.owner.x;
+                ball.y = ball.owner.y - 25;
+
+                // Defender AI: Move towards ball owner
+                if (!draggingEntity || draggingEntity.id !== 'd1') {
+                    let dx = ball.owner.x - defender.x;
+                    let dy = ball.owner.y - defender.y;
+                    let dist = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (dist > defender.interceptionZone - 15) { // Stop slightly before completely covering the ball
+                        defender.x += (dx / dist) * defenderSpeed;
+                        defender.y += (dy / dist) * defenderSpeed;
+                    }
+                }
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+
+            // 1. Draw Pitch lines (Square zone)
+            const margin = 50 * scale;
+            const pitchW = width - (margin * 2);
+            const pitchH = height - (margin * 2);
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+            ctx.lineWidth = 2 * scale;
+            ctx.strokeRect(margin, margin, pitchW, pitchH);
+
+            // 2. Draw Cones at corners
+            const cones = [
+                {x: margin, y: margin},
+                {x: width - margin, y: margin},
+                {x: margin, y: height - margin},
+                {x: width - margin, y: height - margin}
+            ];
+            
+            cones.forEach(cone => {
+                ctx.fillStyle = '#f97316'; // orange-500
+                ctx.beginPath();
+                ctx.moveTo(cone.x, cone.y - (10*scale));
+                ctx.lineTo(cone.x - (8*scale), cone.y + (8*scale));
+                ctx.lineTo(cone.x + (8*scale), cone.y + (8*scale));
+                ctx.fill();
+            });
+
+            // 3. Draw Passing line if active
+            if (passLine) {
+                ctx.beginPath();
+                ctx.moveTo(passLine.start.x * scale, passLine.start.y * scale);
+                // Draw line up to ball
+                ctx.lineTo(ball.x * scale, ball.y * scale);
+                
+                ctx.strokeStyle = passLine.success ? '#22c55e' : '#ef4444'; // Green or Red
+                if(!passLine.success) ctx.strokeStyle = 'rgba(239, 68, 68, 0.8)';
+                ctx.lineWidth = 4 * scale;
+                ctx.setLineDash([5, 5]);
+                ctx.stroke();
+                ctx.setLineDash([]); // Reset
+            }
+
+            // 4. Draw entities
+            entities.forEach(ent => {
+                let x = ent.x * scale;
+                let y = ent.y * scale;
+                let r = ent.radius * scale;
+
+                // Defender specific: Interception zone
+                if (ent.type === 'defender') {
+                    ctx.beginPath();
+                    ctx.arc(x, y, ent.interceptionZone * scale, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(239, 68, 68, 0.15)';
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
+                    ctx.lineWidth = 2 * scale;
+                    ctx.setLineDash([4, 4]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
+                // Player Shadow
+                ctx.beginPath();
+                ctx.arc(x, y + 4, r, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.fill();
+
+                // Player Body
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.fillStyle = ent.color;
+                ctx.fill();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2 * scale;
+                ctx.stroke();
+
+                // Direction/Nose indicator (just for visuals)
+                ctx.beginPath();
+                ctx.arc(x, y - (r/1.5), r/3, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.fill();
+            });
+
+            // 5. Draw Ball
+            ctx.beginPath();
+            ctx.arc(ball.x * scale, ball.y * scale, ball.radius * scale, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 1.5 * scale;
+            ctx.stroke();
+            
+            // Ball pattern
+            ctx.beginPath();
+            ctx.moveTo((ball.x - 3) * scale, (ball.y - 3) * scale);
+            ctx.lineTo((ball.x + 3) * scale, (ball.y + 3) * scale);
+            ctx.moveTo((ball.x + 3) * scale, (ball.y - 3) * scale);
+            ctx.lineTo((ball.x - 3) * scale, (ball.y + 3) * scale);
+            ctx.strokeStyle = '#000000';
+            ctx.stroke();
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // Input Handling
+        function getMousePos(evt) {
+            const rect = canvas.getBoundingClientRect();
+            // Need to divide by scale to get coordinates in the 600x600 coordinate system
+            const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+            const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+            
+            return {
+                x: (clientX - rect.left) / scale,
+                y: (clientY - rect.top) / scale
+            };
+        }
+
+        function onPointerDown(e) {
+            if (isPassing) return;
+            const pos = getMousePos(e);
+            
+            // Check if clicking on an entity (reverse loop to select top-most if overlapping)
+            for (let i = entities.length - 1; i >= 0; i--) {
+                const ent = entities[i];
+                const dx = pos.x - ent.x;
+                const dy = pos.y - ent.y;
+                if (Math.sqrt(dx * dx + dy * dy) < ent.radius * 2) { // slightly larger hit area
+                    draggingEntity = ent;
+                    break;
+                }
+            }
+        }
+
+        function onPointerMove(e) {
+            if (!draggingEntity || isPassing) return;
+            e.preventDefault(); // Prevent scrolling on touch
+            const pos = getMousePos(e);
+            
+            // Keep within bounds - opdateret til at tillade bevægelse på hele telefonens højde
+            const boundsMargin = draggingEntity.radius;
+            const logicalWidth = width / scale;
+            const logicalHeight = height / scale;
+            
+            draggingEntity.x = Math.max(boundsMargin, Math.min(logicalWidth - boundsMargin, pos.x));
+            draggingEntity.y = Math.max(boundsMargin, Math.min(logicalHeight - boundsMargin, pos.y));
+            
+            // Update ball instantly if dragging the owner
+            if (ball.owner === draggingEntity) {
+                ball.x = draggingEntity.x;
+                ball.y = draggingEntity.y - 25;
+            }
+        }
+
+        function onPointerUp() {
+            draggingEntity = null;
+        }
+
+        // Listeners
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+        });
+
+        canvas.addEventListener('mousedown', onPointerDown);
+        canvas.addEventListener('mousemove', onPointerMove);
+        window.addEventListener('mouseup', onPointerUp);
+
+        canvas.addEventListener('touchstart', onPointerDown, {passive: false});
+        canvas.addEventListener('touchmove', onPointerMove, {passive: false});
+        window.addEventListener('touchend', onPointerUp);
+
+        // Optimeret knap: Reagerer med det samme og forhindrer at baggrunden (banen) fanger trykket
+        function triggerPass(e) {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation(); // Vigtigt: Forhindrer at trykket går igennem til grønsværen
+            }
+            handlePass();
+        }
+
+        passBtn.addEventListener('pointerdown', triggerPass);
+
+        // Start
+        initEntities();
+        resizeCanvas();
+        gameLoop();
+
+    </script>
+</body>
+</html>
