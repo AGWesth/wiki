@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aktion på Aktion - U10/U11 Piger</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         body {
@@ -14,14 +15,16 @@
             padding: 0;
             overflow: hidden; /* Undgå scrolling på mobil */
             touch-action: none;
+            display: flex;
+            flex-direction: column;
+            width: 100vw;
+            height: 100vh;
         }
         
         #canvas-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
+            position: relative;
+            flex: 1;
+            width: 100%;
             overflow: hidden;
         }
 
@@ -43,16 +46,24 @@
         <div id="score-display" class="absolute top-4 right-4 bg-white/90 px-3 py-1 rounded-lg font-bold text-slate-700 shadow z-10 pointer-events-none">
             Score: <span id="score-val">0</span>
         </div>
+
+        <!-- Simpel Game Over Skærm -->
+        <div id="game-over-screen" class="hidden absolute inset-0 bg-slate-900/95 flex-col items-center justify-center text-white z-50">
+            <h2 class="text-3xl md:text-4xl font-semibold mb-2 text-center">Du klarede</h2>
+            <div id="final-score" class="text-8xl md:text-9xl font-black text-blue-400 mb-2">0</div>
+            <h2 class="text-2xl md:text-3xl font-semibold mb-10 text-center">Pasninger!<br><span class="text-green-400 text-xl md:text-2xl">Godt gået!</span></h2>
+            
+            <button onpointerdown="restartGame(event)" class="bg-blue-600 active:bg-blue-700 text-white font-bold py-4 px-10 rounded-full shadow-lg text-xl pointer-events-auto select-none touch-none">
+                Spil igen
+            </button>
+        </div>
+
         <canvas id="pitch"></canvas>
-        <button id="pass-btn" class="absolute bottom-10 right-6 md:right-10 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-5 px-10 text-xl md:text-2xl rounded-full shadow-2xl border-4 border-white transition-transform active:scale-90 z-20 select-none touch-none" style="-webkit-tap-highlight-color: transparent; touch-action: none;">
-            Aflever ⚽
-        </button>
     </div>
 
     <script>
         const canvas = document.getElementById('pitch');
         const ctx = canvas.getContext('2d');
-        const passBtn = document.getElementById('pass-btn');
         const statusMsg = document.getElementById('status-message');
 
         // Logic variables
@@ -62,17 +73,22 @@
         
         let animationFrameId;
         let isPassing = false;
+        let isGameOver = false;
         let passLine = null; // {start, end, progress, success}
         let passTimer = 0;
 
         let score = 0;
         let defenderSpeed = 0.5;
-        const speedIncrement = 0.005;
+        const speedIncrement = 0.08; // Øget en smule mere så de hurtigere mærker presset
 
         // Entities
         let entities = [];
         let attacker1, attacker2, defender, ball;
         let draggingEntity = null;
+
+        let receiverLastPos = { x: 0, y: 0 };
+        let receiverStationarySince = 0;
+        let hasReceiverMoved = false;
 
         function initEntities() {
             // Define standard coordinates based on a 600x600 board
@@ -84,7 +100,14 @@
 
             entities = [attacker1, attacker2, defender];
             isPassing = false;
+            isGameOver = false;
             passLine = null;
+            hasReceiverMoved = false;
+            receiverStationarySince = 0;
+            
+            // Sæt startposition for modtageren, så den ikke afleverer før de flyttes
+            let initialReceiver = attacker1.hasBall ? attacker2 : attacker1;
+            receiverLastPos = { x: initialReceiver.x, y: initialReceiver.y };
             
             score = 0;
             defenderSpeed = 0.5;
@@ -180,6 +203,38 @@
             }
         }
 
+        function showGameOver() {
+            const gameOverScreen = document.getElementById('game-over-screen');
+            const finalScoreSpan = document.getElementById('final-score');
+            
+            finalScoreSpan.innerText = score;
+            gameOverScreen.classList.remove('hidden');
+            gameOverScreen.classList.add('flex');
+            
+            // Meget lille og simpel konfetti-eksplosion i midten
+            if (typeof confetti !== 'undefined') {
+                confetti({
+                    particleCount: 1120,
+                    spread: 60,
+                    origin: { y: 0.6 },
+                    colors: ['#22c55e', '#ffffff', '#3b82f6'],
+                    disableForReducedMotion: true
+                });
+            }
+        }
+
+        function restartGame(e) {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            const gameOverScreen = document.getElementById('game-over-screen');
+            gameOverScreen.classList.add('hidden');
+            gameOverScreen.classList.remove('flex');
+            draggingEntity = null; // Sørg for at ingen spillere hænger fast
+            initEntities();
+        }
+
         function update() {
             // Handle animation logic
             if (isPassing && passLine) {
@@ -201,11 +256,17 @@
                         defenderSpeed += speedIncrement;
                         updateScoreDisplay();
 
-                        setTimeout(() => {
-                            isPassing = false;
-                            passLine = null;
-                            setStatus('Godt spillet! Hvor skal du nu løbe hen?', 'blue');
-                        }, 1500);
+                        // Nulstil omgængående så der kan spilles videre uden pause
+                        isPassing = false;
+                        passLine = null;
+                        hasReceiverMoved = false;
+                        receiverStationarySince = 0;
+                        
+                        // Opdater last pos for den NYE modtager
+                        let newReceiver = attacker1.hasBall ? attacker2 : attacker1;
+                        receiverLastPos = {x: newReceiver.x, y: newReceiver.y};
+
+                        setStatus('Godt spillet! Hvor skal du nu løbe hen?', 'blue');
                     } else {
                         // Fail animation stops at interception radius
                         let dx = passLine.end.x - passLine.start.x;
@@ -214,15 +275,14 @@
                         // Roughly place ball near defender
                         ball.x = passLine.start.x + dx * 0.5;
                         ball.y = passLine.start.y + dy * 0.5;
-
-                        score = 0;
-                        defenderSpeed = 0.5;
-                        updateScoreDisplay();
-
-                        setTimeout(() => {
-                            initEntities();
-                            setStatus('Pasning brudt! Spillet er genstartet.', 'orange');
-                        }, 1500);
+                        
+                        // Sørg for at bolden slippes og spillet ikke kører i ring
+                        ball.owner = null; 
+                        isGameOver = true;
+                        isPassing = false;
+                        passLine = null;
+                        
+                        showGameOver();
                     }
                 } else {
                     // Move ball during animation
@@ -235,6 +295,33 @@
                 // Ball follows owner
                 ball.x = ball.owner.x;
                 ball.y = ball.owner.y - 25;
+
+                // Auto-pass logic
+                let receiver = attacker1.hasBall ? attacker2 : attacker1;
+                
+                // Tjek hvor meget modtageren har flyttet sig siden sidst
+                let dist = Math.hypot(receiver.x - receiverLastPos.x, receiver.y - receiverLastPos.y);
+                receiverLastPos.x = receiver.x;
+                receiverLastPos.y = receiver.y;
+
+                if (dist > 1) { 
+                    // Spilleren bevæger sig (enten med fingeren eller lige efter slip)
+                    receiverStationarySince = 0;
+                    hasReceiverMoved = true;
+                } else if (hasReceiverMoved) { 
+                    // Spilleren står nu helt stille
+                    if (receiverStationarySince === 0) {
+                        receiverStationarySince = Date.now();
+                    } else {
+                        let elapsed = Date.now() - receiverStationarySince;
+                        if (elapsed >= 600) {
+                            handlePass();
+                            receiverStationarySince = 0; 
+                            hasReceiverMoved = false;
+                            draggingEntity = null; // Slip spilleren automatisk
+                        }
+                    }
+                }
 
                 // Defender AI: Move towards ball owner
                 if (!draggingEntity || draggingEntity.id !== 'd1') {
@@ -333,6 +420,20 @@
                 ctx.arc(x, y - (r/1.5), r/3, 0, Math.PI * 2);
                 ctx.fillStyle = 'rgba(255,255,255,0.6)';
                 ctx.fill();
+
+                // Visuel Timer Ring (Viser hvornår der afleveres automatisk)
+                let currentReceiver = attacker1.hasBall ? attacker2 : attacker1;
+                if (ent === currentReceiver && receiverStationarySince > 0 && !isPassing) {
+                    let elapsed = Date.now() - receiverStationarySince;
+                    let progress = Math.min(elapsed / 600, 1);
+                    
+                    ctx.beginPath();
+                    // Tegn cirklen lidt større end spilleren, der fyldes op over 0.6 sek.
+                    ctx.arc(x, y, r + (6 * scale), -Math.PI/2, -Math.PI/2 + (Math.PI * 2 * progress));
+                    ctx.strokeStyle = '#22c55e'; // Grøn timer
+                    ctx.lineWidth = 4 * scale;
+                    ctx.stroke();
+                }
             });
 
             // 5. Draw Ball
@@ -363,13 +464,10 @@
         // Input Handling
         function getMousePos(evt) {
             const rect = canvas.getBoundingClientRect();
-            // Need to divide by scale to get coordinates in the 600x600 coordinate system
-            const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-            const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
-            
+            // Vi bruger nu PointerEvents (hvilket forener mus og touch), så der er kun evt.clientX/Y
             return {
-                x: (clientX - rect.left) / scale,
-                y: (clientY - rect.top) / scale
+                x: (evt.clientX - rect.left) / scale,
+                y: (evt.clientY - rect.top) / scale
             };
         }
 
@@ -382,7 +480,7 @@
                 const ent = entities[i];
                 const dx = pos.x - ent.x;
                 const dy = pos.y - ent.y;
-                if (Math.sqrt(dx * dx + dy * dy) < ent.radius * 2) { // slightly larger hit area
+                if (Math.sqrt(dx * dx + dy * dy) < ent.radius * 2) { 
                     draggingEntity = ent;
                     break;
                 }
@@ -390,11 +488,10 @@
         }
 
         function onPointerMove(e) {
-            if (!draggingEntity || isPassing) return;
-            e.preventDefault(); // Prevent scrolling on touch
+            if (!draggingEntity || isPassing || isGameOver) return;
+            e.preventDefault(); 
             const pos = getMousePos(e);
             
-            // Keep within bounds - opdateret til at tillade bevægelse på hele telefonens højde
             const boundsMargin = draggingEntity.radius;
             const logicalWidth = width / scale;
             const logicalHeight = height / scale;
@@ -402,14 +499,13 @@
             draggingEntity.x = Math.max(boundsMargin, Math.min(logicalWidth - boundsMargin, pos.x));
             draggingEntity.y = Math.max(boundsMargin, Math.min(logicalHeight - boundsMargin, pos.y));
             
-            // Update ball instantly if dragging the owner
             if (ball.owner === draggingEntity) {
                 ball.x = draggingEntity.x;
                 ball.y = draggingEntity.y - 25;
             }
         }
 
-        function onPointerUp() {
+        function onPointerUp(e) {
             draggingEntity = null;
         }
 
@@ -418,24 +514,11 @@
             resizeCanvas();
         });
 
-        canvas.addEventListener('mousedown', onPointerDown);
-        canvas.addEventListener('mousemove', onPointerMove);
-        window.addEventListener('mouseup', onPointerUp);
-
-        canvas.addEventListener('touchstart', onPointerDown, {passive: false});
-        canvas.addEventListener('touchmove', onPointerMove, {passive: false});
-        window.addEventListener('touchend', onPointerUp);
-
-        // Optimeret knap: Reagerer med det samme og forhindrer at baggrunden (banen) fanger trykket
-        function triggerPass(e) {
-            if (e) {
-                e.preventDefault();
-                e.stopPropagation(); // Vigtigt: Forhindrer at trykket går igennem til grønsværen
-            }
-            handlePass();
-        }
-
-        passBtn.addEventListener('pointerdown', triggerPass);
+        // 100% MODERNE POINTER EVENTS: Fjerner rod med dobbelte touch/mouse triggere
+        canvas.addEventListener('pointerdown', onPointerDown);
+        canvas.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+        window.addEventListener('pointercancel', onPointerUp);
 
         // Start
         initEntities();
