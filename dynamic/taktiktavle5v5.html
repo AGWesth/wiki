@@ -210,11 +210,8 @@
      * Her bygger du dine animationer. Der er INGEN forkerte svar her, 
      * kun et forløb som du dikterer trin for trin.
      *
-     * r1-r5 = Rødt hold (jer)
-     * b1-b5 = Blåt hold (modstanderen)
-     *
-     * I første trin (index 0) bruges 'start' til at placere alle.
-     * I efterfølgende trin bruges 'end' til kun at flytte dem der bevæger sig.
+     * NYT: Tilføj "autoPlayDelay: 1500" for at lade tavlen afspille næste 
+     * trin automatisk efter 1.5 sekunder.
      */
     const scenarios = [
         {
@@ -227,32 +224,33 @@
                         r1: {x: 200, y: 550}, r2: {x: 80, y: 450}, r3: {x: 320, y: 400}, r4: {x: 180, y: 380}, r5: {x: 200, y: 250},
                         b1: {x: 200, y: 50},  b2: {x: 200, y: 120}, b3: {x: 280, y: 200}, b4: {x: 150, y: 300}, b5: {x: 280, y: 300},
                         ball: {x: 200, y: 540} 
-                    }
+                    },
+                    autoPlayDelay: 1500 // Venter 1.5 sekund og starter automatisk næste trin
                 },
                 {
                     instruction: "Bagerste hjælper keeper",
-                    end: { r2: {x: 100, y: 500} } 
+                    end: { r2: {x: 100, y: 500} },
+                    autoPlayDelay: 500 // Venter kun et halvt sekund før den fortsætter
                 },
                 {
                     instruction: "Kanter står bredt på linjen",
                     end: { r4: {x: 40, y: 300}, r3: {x: 340, y: 300} } 
+                    // Ingen autoPlayDelay her = Den stopper, og du skal trykke "Næste Trin" for at fortsætte.
                 },
                 {
                     instruction: "Keeper aflevere til bagerste",
-                    end: { ball: {x: 100, y: 490}} 
+                    end: { ball: {x: 100, y: 490}},
+                    autoPlayDelay: 1000
                 },
-                  
                 {
                     instruction: "Keeper går frem",
-                    end: { r1: {x: 280, y: 510}, b4: {x: 130, y: 400}, b5: {x: 200, y: 410}} 
+                    end: { r1: {x: 280, y: 510}, b4: {x: 130, y: 400}, b5: {x: 200, y: 410}},
+                    autoPlayDelay: 500
                 },
-                  
                 {
                     instruction: "Aflever op langs kanten",
                     end: { ball: {x: 40, y: 290}, b5: {x: 200, y: 410}} 
                 }
-
-                
             ]
         },
         {
@@ -265,15 +263,18 @@
                         r1: {x: 200, y: 550}, r2: {x: 100, y: 420}, r3: {x: 300, y: 420}, r4: {x: 200, y: 350}, r5: {x: 250, y: 220},
                         b1: {x: 200, y: 50},  b2: {x: 150, y: 180}, b3: {x: 300, y: 150}, b4: {x: 200, y: 280}, b5: {x: 100, y: 350},
                         ball: {x: 200, y: 340} 
-                    }
+                    },
+                    autoPlayDelay: 2000
                 },
                 {
                     instruction: "Trin 2: Angriberen (Rød 5) løber bevidst ud mod højre hjørne.",
-                    end: { r5: {x: 350, y: 100}, b3: {x: 330, y: 120}, b4: {x: 200, y: 260} } 
+                    end: { r5: {x: 350, y: 100}, b3: {x: 330, y: 120}, b4: {x: 200, y: 260} },
+                    autoPlayDelay: 1000
                 },
                 {
                     instruction: "Trin 3: Løbet trækker forsvaret med, og midten åbnes for boldholderen!",
-                    end: { r4: {x: 200, y: 200}, ball: {x: 200, y: 190}, b4: {x: 200, y: 240} } 
+                    end: { r4: {x: 200, y: 200}, ball: {x: 200, y: 190}, b4: {x: 200, y: 240} },
+                    autoPlayDelay: 1000
                 },
                 {
                     instruction: "Trin 4: Alene med målmanden – Skud og mål!",
@@ -298,6 +299,7 @@
     let animStartTime = 0;
     let ANIM_DURATION = 2000; // ms. Ændres nu af slideren
     let reqAnimFrame;
+    let autoPlayTimeout = null; // Ny timer variabel
 
     // UI Referencer
     const ui = {
@@ -411,6 +413,8 @@
 
     // --- Logik ---
     function initScenario() {
+        clearTimeout(autoPlayTimeout); // Stop evt. igangværende auto-play timer
+
         let sc = scenarios[currentScenIdx];
         currentPhaseIdx = 0;
         
@@ -443,11 +447,21 @@
             ui.btnNextStep.disabled = false;
             ui.btnNextStep.innerText = "▶ Næste Trin";
             gameState = "WAITING";
+
+            // AUTO-PLAY LOGIK: Tjek om trinnet har en "autoPlayDelay"
+            if (phase.autoPlayDelay !== undefined) {
+                ui.btnNextStep.innerText = "⏳ Auto-spiller...";
+                autoPlayTimeout = setTimeout(() => {
+                    if (gameState === "WAITING") playNextPhase();
+                }, phase.autoPlayDelay);
+            }
         }
     }
 
     function playNextPhase() {
         if (gameState !== "WAITING") return;
+        
+        clearTimeout(autoPlayTimeout); // Afbryd timeren, hvis du selv nåede at trykke på knappen
         
         let sc = scenarios[currentScenIdx];
         currentPhaseIdx++;
