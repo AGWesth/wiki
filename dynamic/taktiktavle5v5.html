@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Taktiktavle: 5v5 Animationer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100dvh; /* Tvinger højden til præcis én skærm. Låser mod scroll. */
+            width: 100%;
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; 
+            touch-action: none; 
+            overflow: hidden; 
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 500px; 
+            margin: 0 auto;
+            background: #1f2937;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 1. Kompakt Top Header */
+        #top-header {
+            flex: 0 0 auto;
+            background: #111827;
+            color: white;
+            padding: 0.75rem 1rem;
+            border-bottom: 2px solid #374151;
+            text-align: center;
+            z-index: 10;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+
+        #scenario-title {
+            margin-bottom: 0.25rem;
+        }
+
+        #banner-text {
+            color: #60a5fa; /* Blå instruktionsfarve til præsentation */
+            font-size: 0.95rem;
+            font-weight: 600;
+            min-height: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 1;
+            transition: opacity 0.3s;
+        }
+
+        /* 2. Dynamisk midtersektion til banen */
+        #canvas-wrapper {
+            flex: 1 1 auto; 
+            min-height: 0; 
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 0.5rem;
+            background-color: #1f2937;
+        }
+
+        canvas {
+            display: block;
+            background-color: #22c55e;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            aspect-ratio: 400 / 600;
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+        }
+
+        /* 3. Action Panel i bunden (Afspilnings-knapper) */
+        #controls-container {
+            flex: 0 0 auto;
+            background: #111827;
+            border-top: 2px solid #374151;
+            padding: 1rem;
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 10;
+        }
+
+        .btn {
+            color: white;
+            font-weight: 700;
+            padding: 0.85rem 0.5rem;
+            border-radius: 0.75rem;
+            border: 2px solid rgba(255,255,255,0.1);
+            transition: transform 0.1s, opacity 0.2s;
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        
+        .btn:active { transform: scale(0.95); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        
+        .btn-restart { background: #374151; width: 25%; } 
+        .btn-next-step { background: linear-gradient(135deg, #10b981, #059669); width: 45%; font-size: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.2);} 
+        .btn-next-scen { background: #2563eb; width: 30%; }
+
+        /* Overlays */
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(17, 24, 39, 0.9);
+            padding: 1.5rem;
+            text-align: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 50;
+        }
+
+        .overlay.active { opacity: 1; pointer-events: auto; }
+
+        .modal-card {
+            background: white;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            width: 100%;
+            max-width: 350px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        .progress-dots {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .dot { width: 10px; height: 10px; border-radius: 50%; background: #e5e7eb; opacity: 0.4; transition: 0.3s; }
+        .dot.filled { opacity: 1; background: #60a5fa; }
+        .dot.current { opacity: 1; background: #3b82f6; box-shadow: 0 0 8px #3b82f6; transform: scale(1.2); }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- 1. Top Header -->
+        <div id="top-header">
+            <h1 class="text-sm font-extrabold uppercase tracking-widest text-blue-500">5v5 Præsentation</h1>
+            <p id="scenario-title" class="text-xs text-gray-400 font-semibold mb-1">Scenarie titel</p>
+            <span id="banner-text">Tekst</span>
+        </div>
+
+        <!-- 2. Dynamisk Bane Område -->
+        <div id="canvas-wrapper">
+            <canvas id="tacticBoard" width="400" height="600"></canvas>
+            
+            <!-- Intro / Start Screen -->
+            <div id="intro-screen" class="overlay active">
+                <div class="modal-card">
+                    <h2 class="text-xl font-bold text-gray-800 mb-2">Trænerens Tavle</h2>
+                    <p class="text-gray-600 mb-4 text-sm leading-relaxed">
+                        Her kan du vise pigerne bevægelser og løbemønstre trin for trin.<br><br>
+                        Brug knappen <strong>"Næste Trin"</strong> i bunden for at afspille næste del af animationen.
+                    </p>
+                    <button id="btn-start" class="btn btn-next-step w-full mt-2 py-3">Klar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress prikker lige over controls -->
+        <div class="bg-gray-800 py-2 border-t border-gray-700">
+             <div class="progress-dots" id="progress-indicator"></div>
+             
+             <!-- Hastigheds-kontrol -->
+             <div class="px-4 mt-2 flex items-center justify-between">
+                 <span class="text-xs text-gray-400 font-semibold" style="width: 65px;">🐌 Langsom</span>
+                 <input type="range" id="speed-slider" min="1" max="5" value="3" class="mx-2 flex-1" style="accent-color: #10b981;">
+                 <span class="text-xs text-gray-400 font-semibold text-right" style="width: 65px;">Hurtig 🐇</span>
+             </div>
+        </div>
+
+        <!-- 3. Action Panel (Afspilningskontrol) -->
+        <div id="controls-container">
+            <button id="btn-restart" class="btn btn-restart">🔄 Forfra</button>
+            <button id="btn-next-step" class="btn btn-next-step">▶ Næste Trin</button>
+            <button id="btn-next-scen" class="btn btn-next-scen">⏭ Skift</button>
+        </div>
+    </div>
+
+<script>
+    /*
+     * TRÆNERENS OMRÅDE: ANIMATIONSSCENARIER
+     * ----------------------------------------------------
+     * Her bygger du dine animationer. Der er INGEN forkerte svar her, 
+     * kun et forløb som du dikterer trin for trin.
+     *
+     * r1-r5 = Rødt hold (jer)
+     * b1-b5 = Blåt hold (modstanderen)
+     *
+     * I første trin (index 0) bruges 'start' til at placere alle.
+     * I efterfølgende trin bruges 'end' til kun at flytte dem der bevæger sig.
+     */
+    const scenarios = [
+        {
+            id: 1,
+            title: "Mål spark",
+            phases: [
+                {
+                    instruction: "Keeper har bolden",
+                    start: { 
+                        r1: {x: 200, y: 550}, r2: {x: 80, y: 450}, r3: {x: 320, y: 400}, r4: {x: 180, y: 380}, r5: {x: 200, y: 250},
+                        b1: {x: 200, y: 50},  b2: {x: 200, y: 120}, b3: {x: 280, y: 200}, b4: {x: 150, y: 300}, b5: {x: 280, y: 300},
+                        ball: {x: 200, y: 540} 
+                    }
+                },
+                {
+                    instruction: "Bagerste hjælper keeper",
+                    end: { r2: {x: 100, y: 500} } 
+                },
+                {
+                    instruction: "Kanter står bredt på linjen",
+                    end: { r4: {x: 40, y: 300}, r3: {x: 340, y: 300} } 
+                },
+                {
+                    instruction: "Keeper aflevere til bagerste",
+                    end: { ball: {x: 100, y: 490}} 
+                },
+                  
+                {
+                    instruction: "Keeper går frem",
+                    end: { r1: {x: 280, y: 510}, b4: {x: 130, y: 400}, b5: {x: 200, y: 410}} 
+                },
+                  
+                {
+                    instruction: "Aflever op langs kanten",
+                    end: { ball: {x: 40, y: 290}, b5: {x: 200, y: 410}} 
+                }
+
+                
+            ]
+        },
+        {
+            id: 2,
+            title: "At trække forsvaret væk (Falsk løb)",
+            phases: [
+                {
+                    instruction: "Trin 1: Rød 4 (Midtbane) fører bolden frem centralt.",
+                    start: { 
+                        r1: {x: 200, y: 550}, r2: {x: 100, y: 420}, r3: {x: 300, y: 420}, r4: {x: 200, y: 350}, r5: {x: 250, y: 220},
+                        b1: {x: 200, y: 50},  b2: {x: 150, y: 180}, b3: {x: 300, y: 150}, b4: {x: 200, y: 280}, b5: {x: 100, y: 350},
+                        ball: {x: 200, y: 340} 
+                    }
+                },
+                {
+                    instruction: "Trin 2: Angriberen (Rød 5) løber bevidst ud mod højre hjørne.",
+                    end: { r5: {x: 350, y: 100}, b3: {x: 330, y: 120}, b4: {x: 200, y: 260} } 
+                },
+                {
+                    instruction: "Trin 3: Løbet trækker forsvaret med, og midten åbnes for boldholderen!",
+                    end: { r4: {x: 200, y: 200}, ball: {x: 200, y: 190}, b4: {x: 200, y: 240} } 
+                },
+                {
+                    instruction: "Trin 4: Alene med målmanden – Skud og mål!",
+                    end: { ball: {x: 200, y: 40}, b1: {x: 180, y: 60}, r4: {x: 200, y: 150} } 
+                }
+            ]
+        }
+    ];
+
+    // --- State & Core Logic ---
+    const canvas = document.getElementById('tacticBoard');
+    const ctx = canvas.getContext('2d');
+    
+    let currentScenIdx = 0;
+    let currentPhaseIdx = 0;
+    let gameState = "IDLE"; // WAITING, ANIMATING, FINISHED
+    
+    let positions = {};
+    let targetPositions = {};
+    let startPositions = {};
+    
+    let animStartTime = 0;
+    let ANIM_DURATION = 2000; // ms. Ændres nu af slideren
+    let reqAnimFrame;
+
+    // UI Referencer
+    const ui = {
+        title: document.getElementById('scenario-title'),
+        bannerText: document.getElementById('banner-text'),
+        intro: document.getElementById('intro-screen'),
+        btnStart: document.getElementById('btn-start'),
+        btnRestart: document.getElementById('btn-restart'),
+        btnNextStep: document.getElementById('btn-next-step'),
+        btnNextScen: document.getElementById('btn-next-scen'),
+        dotsContainer: document.getElementById('progress-indicator'),
+        speedSlider: document.getElementById('speed-slider')
+    };
+
+    // --- Hastigheds Kontrol ---
+    const durationMap = {
+        1: 8000, // 🐌 Ekstrem slow-motion (8 sekunder for ét løb)
+        2: 4500, // Langsom (4.5 sekunder)
+        3: 2000, // Normal (2 sekunder)
+        4: 1000, // Hurtig (1 sekund)
+        5: 400   // 🐇 Lynhurtig (0.4 sekunder)
+    };
+    
+    ui.speedSlider.addEventListener('input', (e) => {
+        ANIM_DURATION = durationMap[e.target.value];
+    });
+    ANIM_DURATION = durationMap[ui.speedSlider.value];
+
+    // --- Hjælpefunktioner ---
+    function lerp(start, end, t) { return start + (end - start) * t; }
+    
+    // Ændret fra en meget 'aggressiv' easeOut til en mere rolig og stabil fart
+    function easeOut(t) { 
+        // Hvis vi er i slowmotion (slider 1 eller 2), gør vi bevægelsen mere lineær
+        if (ANIM_DURATION > 3000) {
+            return t; // Fuldstændig jævn, langsom fart (lineær)
+        }
+        return 1 - Math.pow(1 - t, 3); // Normal blød opbremsning til de hurtigere
+    }
+
+    function updateDots() {
+        let sc = scenarios[currentScenIdx];
+        ui.dotsContainer.innerHTML = '';
+        for (let i = 0; i < sc.phases.length; i++) {
+            let dot = document.createElement('div');
+            dot.className = 'dot';
+            if (i < currentPhaseIdx) dot.classList.add('filled');
+            else if (i === currentPhaseIdx) dot.classList.add('current');
+            ui.dotsContainer.appendChild(dot);
+        }
+    }
+
+    function copyPositions(pos) {
+        return JSON.parse(JSON.stringify(pos));
+    }
+
+    // --- Tegnefunktioner ---
+    function drawField() {
+        // Græsstriber
+        for (let i = 0; i < canvas.height; i += 40) {
+            ctx.fillStyle = (i / 40) % 2 === 0 ? '#22c55e' : '#16a34a';
+            ctx.fillRect(0, i, canvas.width, 40);
+        }
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+        
+        ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+        
+        ctx.beginPath(); ctx.moveTo(10, canvas.height / 2); ctx.lineTo(canvas.width - 10, canvas.height / 2); ctx.stroke();
+
+        ctx.beginPath(); ctx.arc(canvas.width / 2, canvas.height / 2, 45, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(canvas.width / 2, canvas.height / 2, 3, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+
+        ctx.strokeRect(100, 10, 200, 80);
+        ctx.strokeRect(100, canvas.height - 90, 200, 80);
+
+        // Mål Top (Blå)
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(160, 0, 80, 10);
+        ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.beginPath();
+        for(let i = 160; i <= 240; i += 10) { ctx.moveTo(i, 0); ctx.lineTo(i, 10); } ctx.stroke();
+
+        // Mål Bund (Rød)
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(160, canvas.height - 10, 80, 10);
+        ctx.beginPath();
+        for(let i = 160; i <= 240; i += 10) { ctx.moveTo(i, canvas.height-10); ctx.lineTo(i, canvas.height); } ctx.stroke();
+    }
+
+    function drawPlayer(x, y, color, text, isGK=false, size=12) {
+        ctx.beginPath(); ctx.arc(x, y + 4, size, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fill();
+
+        if(isGK) {
+            ctx.beginPath(); ctx.arc(x, y, size+2, 0, Math.PI * 2);
+            ctx.fillStyle = '#fbbf24'; ctx.fill();
+        }
+
+        ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill();
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
+
+        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 11px Inter';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(text, x, y + 1);
+    }
+
+    function drawBall(x, y) {
+        ctx.beginPath(); ctx.arc(x + 2, y + 2, 5, 0, Math.PI * 2); ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fillStyle = '#ffffff'; ctx.fill();
+        ctx.strokeStyle = '#000000'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(x, y, 1.5, 0, Math.PI*2); ctx.fill();
+    }
+
+    // --- Logik ---
+    function initScenario() {
+        let sc = scenarios[currentScenIdx];
+        currentPhaseIdx = 0;
+        
+        ui.title.innerText = sc.title;
+        let phase = sc.phases[currentPhaseIdx];
+        
+        // Fase 0 sætter altid hele brættet op
+        positions = copyPositions(phase.start);
+        targetPositions = copyPositions(positions);
+        startPositions = copyPositions(positions);
+
+        updatePhaseUI();
+        
+        if (!reqAnimFrame) reqAnimFrame = requestAnimationFrame(render);
+    }
+
+    function updatePhaseUI() {
+        let sc = scenarios[currentScenIdx];
+        let phase = sc.phases[currentPhaseIdx];
+        
+        ui.bannerText.innerText = phase.instruction;
+        updateDots();
+
+        // Opdater knapper
+        if (currentPhaseIdx >= sc.phases.length - 1) {
+            ui.btnNextStep.disabled = true;
+            ui.btnNextStep.innerText = "Slut";
+            gameState = "FINISHED";
+        } else {
+            ui.btnNextStep.disabled = false;
+            ui.btnNextStep.innerText = "▶ Næste Trin";
+            gameState = "WAITING";
+        }
+    }
+
+    function playNextPhase() {
+        if (gameState !== "WAITING") return;
+        
+        let sc = scenarios[currentScenIdx];
+        currentPhaseIdx++;
+        let phase = sc.phases[currentPhaseIdx];
+
+        startPositions = copyPositions(positions); // Husk præcis hvor de starter bevægelsen!
+
+        // Opdater kun de enheder, der er angivet i 'end'
+        targetPositions = copyPositions(positions);
+        if (phase.end) {
+            for (let key in phase.end) {
+                targetPositions[key] = { ...phase.end[key] };
+            }
+        }
+        
+        ui.bannerText.innerText = "Afspiller...";
+        gameState = "ANIMATING";
+        animStartTime = 0;
+    }
+
+    // --- Main Render Loop ---
+    function render(timestamp) {
+        if (gameState === "ANIMATING") {
+            if (!animStartTime) animStartTime = timestamp;
+            let t = Math.min((timestamp - animStartTime) / ANIM_DURATION, 1);
+            let easeT = easeOut(t);
+
+            for (let key in positions) {
+                positions[key].x = lerp(startPositions[key].x, targetPositions[key].x, easeT);
+                positions[key].y = lerp(startPositions[key].y, targetPositions[key].y, easeT);
+            }
+
+            if (t >= 1) {
+                positions = copyPositions(targetPositions);
+                updatePhaseUI(); // Skifter state til WAITING eller FINISHED
+            }
+        }
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawField();
+
+        for(let i=1; i<=5; i++) {
+            let key = 'b'+i;
+            if(positions[key]) drawPlayer(positions[key].x, positions[key].y, '#3b82f6', i.toString(), i===1);
+        }
+        for(let i=1; i<=5; i++) {
+            let key = 'r'+i;
+            if(positions[key]) drawPlayer(positions[key].x, positions[key].y, '#dc2626', i.toString(), i===1);
+        }
+        if(positions.ball) drawBall(positions.ball.x, positions.ball.y);
+
+        reqAnimFrame = requestAnimationFrame(render);
+    }
+
+    // --- Events ---
+    ui.btnStart.addEventListener('click', () => {
+        ui.intro.classList.remove('active');
+        initScenario();
+    });
+
+    ui.btnNextStep.addEventListener('click', playNextPhase);
+
+    ui.btnRestart.addEventListener('click', () => {
+        initScenario();
+    });
+
+    ui.btnNextScen.addEventListener('click', () => {
+        currentScenIdx++;
+        if (currentScenIdx >= scenarios.length) currentScenIdx = 0;
+        initScenario();
+    });
+
+    // Start tegning af baggrund
+    drawField();
+
+</script>
+</body>
+</html>
