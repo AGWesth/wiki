@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Taktiktavle: Medspillerens Løb</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            touch-action: manipulation;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            background-color: #4ade80;
+            cursor: pointer;
+        }
+
+        /* UI Overlays */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 1.5rem;
+            text-align: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            font-weight: 700;
+            padding: 1rem 2rem;
+            border-radius: 9999px;
+            border: 4px solid white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: transform 0.1s, box-shadow 0.1s;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+        
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .modal-card {
+            background: white;
+            border-radius: 1rem;
+            padding: 2rem 1.5rem;
+            width: 100%;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        #instruction-banner {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 999px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            white-space: nowrap;
+            z-index: 10;
+        }
+        #instruction-banner.active {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <div id="game-container">
+        <!-- Header -->
+        <div class="bg-gray-900 text-white p-4 text-center">
+            <h1 class="text-xl font-extrabold uppercase tracking-wider">Spil uden bold</h1>
+            <p class="text-sm text-gray-300">Medspillerens placering</p>
+        </div>
+
+        <!-- Canvas -->
+        <div class="relative">
+            <canvas id="tacticBoard" width="400" height="550"></canvas>
+            
+            <div id="instruction-banner">Tryk på den bedste zone!</div>
+
+            <!-- Start Screen Overlay -->
+            <div id="intro-screen" class="overlay active">
+                <div class="modal-card">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-2">Træd ud af skyggen!</h2>
+                    <p class="text-gray-600 mb-6 text-sm">
+                        I denne øvelse styrer du <strong>Spiller 2 (Medspilleren uden bold)</strong>. <br><br>
+                        Din vigtigste opgave er at læse spillet og flytte dig ud af modstanderens <strong>pasningsskygge (det mørke område)</strong> for at skabe en overtals-situation.<br><br>
+                        <em>Husk: Står du i skyggen, kan du ikke modtage bolden! Gør dig spilbar.</em>
+                    </p>
+                    <button id="btn-start" class="btn">Start Træning</button>
+                </div>
+            </div>
+
+            <!-- Result Overlay -->
+            <div id="result-screen" class="overlay">
+                <div class="modal-card">
+                    <div id="result-icon" class="text-6xl mb-2">✅</div>
+                    <h2 id="result-title" class="text-2xl font-bold text-gray-800 mb-2">Godt løbet!</h2>
+                    <p id="result-text" class="text-gray-600 mb-6 text-sm font-medium">Feedback tekst kommer her.</p>
+                    <button id="btn-next" class="btn">Næste Situation</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // --- Scenarier (Fokus på medspillerens bevægelse) ---
+    // P1 = Boldholder, P2 = Medspiller (Brugeren), D = Forsvar
+    const scenarios = [
+        {
+            id: 1,
+            title: "Træd ud af skyggen!",
+            desc: "Forsvarsspilleren kaster en 'pasningsskygge' bag sig. Du står lige nu midt i skyggen! Hvor skal du løbe hen for at blive spilbar?",
+            start: { p1: {x: 200, y: 480}, p2: {x: 200, y: 250}, d: {x: 200, y: 350} },
+            zones: [
+                {
+                    id: 'A', label: 'Bliv i skyggen', x: 200, y: 150, r: 35, correct: false,
+                    feedback: "Du gemmer dig stadig i forsvarsspillerens skygge! Bolden rammer modstanderen.",
+                    p1_end: {x: 200, y: 480}, d_end: {x: 200, y: 350}, ball_end: {x: 200, y: 350} 
+                },
+                {
+                    id: 'B', label: 'Tæt på', x: 200, y: 410, r: 35, correct: false,
+                    feedback: "Du trådte ud af skyggen, men løb helt ned i fødderne på boldholderen. Nu kan én modstander dække jer begge.",
+                    p1_end: {x: 200, y: 480}, d_end: {x: 200, y: 450}, ball_end: {x: 200, y: 450} 
+                },
+                {
+                    id: 'C', label: 'Træd ud', x: 320, y: 300, r: 35, correct: true,
+                    feedback: "Helt perfekt! Du træder skråt ud af skyggen. Nu er der en åben pasningslinje, og I har overtal!",
+                    p1_end: {x: 200, y: 480}, d_end: {x: 220, y: 380}, ball_end: {x: 320, y: 300} 
+                }
+            ]
+        },
+        {
+            id: 2,
+            title: "Find vinklen (Små skridt)",
+            desc: "Nogle gange kræver det kun 1-2 skridt at træde ud af skyggen. Find den nemmeste vinkel at modtage bolden i.",
+            start: { p1: {x: 100, y: 450}, p2: {x: 250, y: 300}, d: {x: 180, y: 370} },
+            zones: [
+                {
+                    id: 'A', label: 'Bag modstander', x: 280, y: 200, r: 35, correct: false,
+                    feedback: "Det løb bringer dig bare længere ind i skyggen! Find en vinkel i stedet.",
+                    p1_end: {x: 100, y: 450}, d_end: {x: 180, y: 370}, ball_end: {x: 180, y: 370} 
+                },
+                {
+                    id: 'B', label: 'Fald ud', x: 120, y: 320, r: 35, correct: true,
+                    feedback: "Godt læst! Du træder et par skridt til siden, undgår skyggen og tilbyder en sikker og åben pasning.",
+                    p1_end: {x: 100, y: 450}, d_end: {x: 140, y: 360}, ball_end: {x: 120, y: 320}
+                },
+                {
+                    id: 'C', label: 'Imod mål', x: 350, y: 350, r: 35, correct: false,
+                    feedback: "Du løber væk fra spillet og gør afleveringen meget lang og svær, selvom du er ude af skyggen.",
+                    p1_end: {x: 100, y: 450}, d_end: {x: 200, y: 370}, ball_end: {x: 250, y: 400} 
+                }
+            ]
+        },
+        {
+            id: 3,
+            title: "Bagud ud af skyggen (Støtten)",
+            desc: "Forsvarsspilleren spærrer vejen fremad, og en stor skygge dækker feltet. Hvordan kan du hjælpe?",
+            start: { p1: {x: 320, y: 200}, p2: {x: 200, y: 120}, d: {x: 250, y: 160} },
+            zones: [
+                {
+                    id: 'A', label: 'Ind i skyggen', x: 150, y: 80, r: 35, correct: false,
+                    feedback: "Du løber ind i skyggen bag forsvarsspilleren. Din medspiller kan slet ikke ramme dig derinde.",
+                    p1_end: {x: 320, y: 200}, d_end: {x: 250, y: 160}, ball_end: {x: 250, y: 160}
+                },
+                {
+                    id: 'B', label: 'Tæt på kant', x: 350, y: 100, r: 35, correct: false,
+                    feedback: "Nu er I begge to klemt oppe i hjørnet. Modstanderen kan let presse jer begge to.",
+                    p1_end: {x: 320, y: 200}, d_end: {x: 320, y: 150}, ball_end: {x: 350, y: 150} 
+                },
+                {
+                    id: 'C', label: 'Støt bagud', x: 220, y: 300, r: 35, correct: true,
+                    feedback: "Klogt! Når vejen frem er i skyggen, træder du tilbage ud af skyggen og bliver en 'sikkerhedsventil'.",
+                    p1_end: {x: 320, y: 200}, d_end: {x: 270, y: 180}, ball_end: {x: 220, y: 300} 
+                }
+            ]
+        },
+        {
+            id: 4,
+            title: "Dybdeløb forbi skyggen",
+            desc: "Modstanderen kaster en skygge over dig. Hvordan kan du bruge dit løb til at straffe forsvaret?",
+            start: { p1: {x: 100, y: 350}, p2: {x: 220, y: 300}, d: {x: 180, y: 280} },
+            zones: [
+                {
+                    id: 'A', label: 'I ryggen', x: 220, y: 200, r: 35, correct: false,
+                    feedback: "Løber du lige frem, ender du bare i skyggen bag forsvarsspilleren.",
+                    p1_end: {x: 100, y: 350}, d_end: {x: 180, y: 250}, ball_end: {x: 150, y: 300}
+                },
+                {
+                    id: 'B', label: 'Ind mod bold', x: 280, y: 380, r: 35, correct: false,
+                    feedback: "Du løber mod bolden og tager pladsen fra boldholderen i stedet for at søge det frie rum.",
+                    p1_end: {x: 100, y: 350}, d_end: {x: 150, y: 350}, ball_end: {x: 150, y: 350}
+                },
+                {
+                    id: 'C', label: 'Løb i dybden', x: 300, y: 100, r: 35, correct: true,
+                    feedback: "Fremragende! Du løber i en bue ud af skyggen og stikker i dybden. Pasningen kan skæres rent igennem!",
+                    p1_end: {x: 100, y: 350}, d_end: {x: 180, y: 200}, ball_end: {x: 300, y: 100} 
+                }
+            ]
+        },
+        {
+            id: 5,
+            title: "Træk skyggen væk",
+            desc: "Du står i skyggen, og boldholderen danner fart! Hvordan bruger du det til at skabe plads?",
+            start: { p1: {x: 200, y: 450}, p2: {x: 200, y: 250}, d: {x: 200, y: 320} },
+            zones: [
+                {
+                    id: 'A', label: 'Imod bolden', x: 200, y: 370, r: 35, correct: false,
+                    feedback: "Du løber lige ind i modstanderen og boldholderen. I klumper fuldstændig sammen!",
+                    p1_end: {x: 200, y: 400}, d_end: {x: 200, y: 380}, ball_end: {x: 200, y: 400}
+                },
+                {
+                    id: 'B', label: 'Ud mod kanten', x: 350, y: 200, r: 35, correct: true,
+                    feedback: "Genialt løb ud af skyggen! Du trak forsvarsspilleren med dig, hvilket gav boldholderen en motorvej mod mål!",
+                    p1_end: {x: 200, y: 200}, d_end: {x: 280, y: 250}, ball_end: {x: 200, y: 200} 
+                },
+                {
+                    id: 'C', label: 'Bliv stående', x: 200, y: 250, r: 35, correct: false,
+                    feedback: "Bliver du stående i skyggen, lader du modstanderen dække afleveringen og blokere driblingen samtidigt.",
+                    p1_end: {x: 200, y: 350}, d_end: {x: 200, y: 320}, ball_end: {x: 200, y: 350}
+                }
+            ]
+        }
+    ];
+
+    // --- State og Variabler ---
+    const canvas = document.getElementById('tacticBoard');
+    const ctx = canvas.getContext('2d');
+    
+    let currentScenarioIndex = 0;
+    // States: IDLE, WAITING_CLICK, ANIMATING_P2, ANIMATING_OUTCOME, SHOW_RESULT
+    let gameState = "IDLE"; 
+    
+    let positions = { p1: {x:0, y:0}, p2: {x:0, y:0}, d: {x:0, y:0}, ball: {x:0, y:0} };
+    let selectedZone = null;
+    
+    // Animation control
+    let animStartTime = 0;
+    const P2_ANIM_DURATION = 1000; // Hvor lang tid tager det for pigerne at løbe
+    const OUTCOME_ANIM_DURATION = 1200; // Hvor lang tid tager konsekvensen
+    let reqAnimFrame;
+
+    // Confetti
+    let particles = [];
+
+    // UI Elements
+    const introScreen = document.getElementById('intro-screen');
+    const resultScreen = document.getElementById('result-screen');
+    const banner = document.getElementById('instruction-banner');
+    const btnStart = document.getElementById('btn-start');
+    const btnNext = document.getElementById('btn-next');
+
+    // --- Hjælpefunktioner ---
+    function lerp(start, end, t) {
+        return start + (end - start) * t;
+    }
+    
+    function easeOutCubic(t) {
+        return 1 - Math.pow(1 - t, 3);
+    }
+
+    // Beregn afstand mellem to punkter
+    function distance(p1, p2) {
+        return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+    }
+
+    // --- Tegne Funktioner ---
+    function drawField() {
+        for (let i = 0; i < canvas.height; i += 40) {
+            ctx.fillStyle = (i / 40) % 2 === 0 ? '#4ade80' : '#22c55e';
+            ctx.fillRect(0, i, canvas.width, 40);
+        }
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.rect(80, -5, 240, 120);
+        ctx.rect(130, -5, 140, 40);
+        ctx.stroke();
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(150, 0, 100, 15);
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for(let i = 150; i <= 250; i += 10) { ctx.moveTo(i, 0); ctx.lineTo(i, 15); }
+        for(let i = 0; i <= 15; i += 5) { ctx.moveTo(150, i); ctx.lineTo(250, i); }
+        ctx.stroke();
+    }
+
+    function drawPlayer(x, y, color, text, size=14) {
+        ctx.beginPath();
+        ctx.arc(x, y + 4, size, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px Inter';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, x, y + 1);
+    }
+
+    function drawBall(x, y) {
+        ctx.beginPath();
+        ctx.arc(x + 2, y + 2, 6, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x-3, y-2, 1.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x+3, y+2, 1.5, 0, Math.PI*2); ctx.fill();
+    }
+
+    function drawZones(timestamp) {
+        let sc = scenarios[currentScenarioIndex];
+        let pulse = Math.sin(timestamp / 200) * 2; // Gør zonerne levende
+        
+        sc.zones.forEach(zone => {
+            // Tegn stiplet cirkel
+            ctx.beginPath();
+            ctx.arc(zone.x, zone.y, zone.r + pulse, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(253, 224, 71, 0.9)'; // Gul
+            ctx.lineWidth = 3;
+            ctx.setLineDash([6, 6]);
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset
+            
+            // Tegn halvgennemsigtig baggrund
+            ctx.beginPath();
+            ctx.arc(zone.x, zone.y, zone.r + pulse, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(253, 224, 71, 0.2)';
+            ctx.fill();
+            
+            // Tekst i cirklen
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 14px Inter';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // Lille hvid boks bag teksten for læsbarhed
+            let textWidth = ctx.measureText(zone.id).width;
+            ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            ctx.fillRect(zone.x - textWidth/2 - 4, zone.y - 10, textWidth + 8, 20);
+            
+            ctx.fillStyle = '#000';
+            ctx.fillText(zone.id, zone.x, zone.y + 1);
+        });
+    }
+
+    function drawConfetti() {
+        particles.forEach(p => {
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x, p.y, p.size, p.size);
+        });
+    }
+
+    // --- Logik og Animation ---
+    function render(timestamp) {
+        if (!animStartTime && (gameState === "ANIMATING_P2" || gameState === "ANIMATING_OUTCOME")) {
+            animStartTime = timestamp;
+        }
+        
+        let sc = scenarios[currentScenarioIndex];
+
+        // 1. P2 Løber til zonen
+        if (gameState === "ANIMATING_P2") {
+            let elapsed = timestamp - animStartTime;
+            let t = Math.min(elapsed / P2_ANIM_DURATION, 1);
+            let easeT = easeOutCubic(t);
+
+            positions.p2.x = lerp(sc.start.p2.x, selectedZone.x, easeT);
+            positions.p2.y = lerp(sc.start.p2.y, selectedZone.y, easeT);
+
+            if (t >= 1) {
+                gameState = "ANIMATING_OUTCOME";
+                animStartTime = timestamp; // Reset timer for next phase
+            }
+        } 
+        // 2. Boldholder og Forsvar reagerer
+        else if (gameState === "ANIMATING_OUTCOME") {
+            let elapsed = timestamp - animStartTime;
+            let t = Math.min(elapsed / OUTCOME_ANIM_DURATION, 1);
+            let easeT = easeOutCubic(t);
+
+            // Flyt Boldholder (P1)
+            positions.p1.x = lerp(sc.start.p1.x, selectedZone.p1_end.x, easeT);
+            positions.p1.y = lerp(sc.start.p1.y, selectedZone.p1_end.y, easeT);
+            
+            // Flyt Forsvar (D)
+            positions.d.x = lerp(sc.start.d.x, selectedZone.d_end.x, easeT);
+            positions.d.y = lerp(sc.start.d.y, selectedZone.d_end.y, easeT);
+
+            // Flyt Bold
+            positions.ball.x = lerp(sc.start.p1.x + 10, selectedZone.ball_end.x, easeT);
+            positions.ball.y = lerp(sc.start.p1.y - 10, selectedZone.ball_end.y, easeT);
+
+            if (t >= 1) {
+                showResultScreen();
+                gameState = "SHOW_RESULT";
+            }
+        }
+        else if (gameState === "SHOW_RESULT" && selectedZone.correct) {
+            // Opdater confetti
+            particles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.1;
+            });
+        }
+
+        // --- Render Frame ---
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawField();
+
+        if (gameState === "WAITING_CLICK") {
+            drawZones(timestamp);
+        }
+
+        // Tegn spillere
+        drawPlayer(positions.d.x, positions.d.y, '#ef4444', 'F');   // Forsvar
+        drawPlayer(positions.p1.x, positions.p1.y, '#2563eb', '1'); // Boldholder
+        
+        // Medspiller (Brugeren) - gør den lidt speciel for at vise man styrer den
+        if(gameState === "WAITING_CLICK") {
+            ctx.beginPath(); ctx.arc(positions.p2.x, positions.p2.y, 20, 0, Math.PI*2);
+            ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fill();
+        }
+        drawPlayer(positions.p2.x, positions.p2.y, '#3b82f6', '2'); // Medspiller (Dig)
+        
+        drawBall(positions.ball.x, positions.ball.y);
+
+        if (gameState === "SHOW_RESULT" && selectedZone && selectedZone.correct) {
+            drawConfetti();
+        }
+
+        reqAnimFrame = requestAnimationFrame(render);
+    }
+
+    function initScenario() {
+        let sc = scenarios[currentScenarioIndex];
+        
+        // Sæt start positioner
+        positions.p1 = { ...sc.start.p1 };
+        positions.p2 = { ...sc.start.p2 };
+        positions.d  = { ...sc.start.d };
+        positions.ball = { x: positions.p1.x + 10, y: positions.p1.y - 10 };
+        selectedZone = null;
+
+        introScreen.classList.remove('active');
+        resultScreen.classList.remove('active');
+        banner.classList.add('active');
+
+        // Sæt instruktionstekst i modal
+        document.querySelector('#intro-screen h2').innerText = sc.title;
+        document.querySelector('#intro-screen p').innerHTML = sc.desc + "<br><br><em>Tryk på den zone (A, B eller C) hvor du vil løbe hen.</em>";
+        
+        if(gameState === "IDLE") {
+            introScreen.classList.add('active');
+            banner.classList.remove('active');
+        } else {
+            gameState = "WAITING_CLICK";
+        }
+        
+        animStartTime = 0;
+        
+        if (!reqAnimFrame) {
+            reqAnimFrame = requestAnimationFrame(render);
+        }
+    }
+
+    function createConfetti() {
+        particles = [];
+        const colors = ['#fde047', '#3b82f6', '#ef4444', '#10b981', '#a855f7'];
+        for(let i=0; i<80; i++) {
+            particles.push({
+                x: canvas.width / 2 + (Math.random() - 0.5) * 50,
+                y: canvas.height / 2,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 1) * 10 - 2,
+                size: Math.random() * 6 + 4,
+                color: colors[Math.floor(Math.random() * colors.length)]
+            });
+        }
+    }
+
+    function handleCanvasClick(event) {
+        if (gameState !== "WAITING_CLICK") return;
+        
+        // Beregn klik-position relativt til canvas (håndterer CSS skalering)
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        
+        // Håndterer både touch og mus
+        let clientX = event.clientX;
+        let clientY = event.clientY;
+        if (event.touches && event.touches.length > 0) {
+            clientX = event.touches[0].clientX;
+            clientY = event.touches[0].clientY;
+        }
+
+        const clickX = (clientX - rect.left) * scaleX;
+        const clickY = (clientY - rect.top) * scaleY;
+
+        let sc = scenarios[currentScenarioIndex];
+        
+        // Tjek om man ramte en zone
+        for (let i = 0; i < sc.zones.length; i++) {
+            let zone = sc.zones[i];
+            let hitRadius = zone.r + 10; // Lidt ekstra margin til pølsefingre
+            if (distance({x: clickX, y: clickY}, {x: zone.x, y: zone.y}) <= hitRadius) {
+                // Valgt!
+                selectedZone = zone;
+                gameState = "ANIMATING_P2";
+                animStartTime = 0;
+                banner.classList.remove('active');
+                
+                if (selectedZone.correct) {
+                    createConfetti();
+                }
+                break;
+            }
+        }
+    }
+
+    function showResultScreen() {
+        const icon = document.getElementById('result-icon');
+        const title = document.getElementById('result-title');
+        const text = document.getElementById('result-text');
+
+        if (selectedZone.correct) {
+            icon.innerText = "⚽️👏";
+            title.innerText = "Fremragende løb!";
+            title.style.color = "#15803d"; 
+        } else {
+            icon.innerText = "❌";
+            title.innerText = "Prøv igen!";
+            title.style.color = "#b91c1c"; 
+        }
+        
+        text.innerText = selectedZone.feedback;
+
+        if (currentScenarioIndex >= scenarios.length - 1 && selectedZone.correct) {
+            btnNext.innerText = "Start Forfra";
+        } else {
+            btnNext.innerText = "Næste Situation";
+        }
+
+        resultScreen.classList.add('active');
+    }
+
+    // --- Event Listeners ---
+    btnStart.addEventListener('click', () => {
+        gameState = "WAITING_CLICK";
+        initScenario();
+    });
+
+    btnNext.addEventListener('click', () => {
+        if (selectedZone.correct) {
+            currentScenarioIndex++;
+            if (currentScenarioIndex >= scenarios.length) {
+                currentScenarioIndex = 0;
+            }
+        }
+        initScenario();
+        // Sørg for banneret vises igen
+        banner.classList.add('active');
+    });
+
+    // Touch og Mus support på banen
+    canvas.addEventListener('mousedown', handleCanvasClick);
+    canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault(); // Forhindrer scrolling
+        handleCanvasClick(e);
+    }, {passive: false});
+
+    // Initial setup
+    drawField();
+    initScenario();
+
+</script>
+</body>
+</html>

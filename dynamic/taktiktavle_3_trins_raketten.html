@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Taktiktavle: 3-Trins Raketten</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            touch-action: manipulation;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            background-color: #4ade80;
+            cursor: pointer;
+        }
+
+        /* Overlays */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 1.5rem;
+            text-align: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 20;
+        }
+
+        .overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .btn {
+            color: white;
+            font-weight: 700;
+            padding: 1rem 1.5rem;
+            border-radius: 9999px;
+            border: 4px solid white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: transform 0.1s;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 0.75rem;
+            font-size: 1.1rem;
+        }
+        
+        .btn:active { transform: scale(0.95); }
+        .btn-primary { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .btn-action { background: linear-gradient(135deg, #f59e0b, #d97706); } /* Orange til Aflever */
+        .btn-dribble { background: linear-gradient(135deg, #10b981, #059669); } /* Grøn til Drible */
+
+        .modal-card {
+            background: white;
+            border-radius: 1rem;
+            padding: 2rem 1.5rem;
+            width: 100%;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Top Instruction Banner */
+        #top-banner {
+            position: absolute;
+            top: 10px;
+            left: 5%;
+            width: 90%;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            text-align: center;
+            z-index: 10;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border: 1px solid #333;
+        }
+        #top-banner.active { opacity: 1; }
+
+        /* Decision Panel (bund) */
+        #decision-panel {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+            padding: 4rem 1.5rem 1.5rem 1.5rem;
+            display: flex;
+            gap: 1rem;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+            z-index: 10;
+        }
+        #decision-panel.active { transform: translateY(0); }
+
+        .progress-dots {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+        .dot {
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            background: #e5e7eb;
+            opacity: 0.4;
+        }
+        .dot.filled { opacity: 1; background: #3b82f6; }
+        .dot.current { opacity: 1; background: #fde047; box-shadow: 0 0 8px #fde047; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <div id="game-container">
+        <!-- Header -->
+        <div class="bg-gray-900 text-white p-3 text-center">
+            <h1 class="text-xl font-extrabold uppercase tracking-wider">3-Trins Raketten</h1>
+            <p id="scenario-title" class="text-sm text-blue-400 font-semibold">Klar til start</p>
+        </div>
+
+        <!-- Canvas Area -->
+        <div class="relative">
+            <canvas id="tacticBoard" width="400" height="550"></canvas>
+            
+            <div id="top-banner">
+                <span id="banner-text">Instruktion kommer her</span>
+            </div>
+
+            <!-- Action Panel for 'Aflever/Drible' valg -->
+            <div id="decision-panel">
+                <button id="btn-opt-1" class="btn btn-action w-1/2">Aflever</button>
+                <button id="btn-opt-2" class="btn btn-dribble w-1/2">Drible</button>
+            </div>
+
+            <!-- Intro / Start Screen -->
+            <div id="intro-screen" class="overlay active">
+                <div class="modal-card">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-2">Samspil & Overblik</h2>
+                    <p class="text-gray-600 mb-6 text-sm">
+                        I disse øvelser skal du træffe <strong>3 rigtige beslutninger i træk</strong> for at score mål.<br><br>
+                        Nogle gange styrer du boldholderen, andre gange styrer du medspilleren uden bold. <br><br>
+                        Læs spillet og samarbejd!
+                    </p>
+                    <button id="btn-start" class="btn btn-primary">Start Træning</button>
+                </div>
+            </div>
+
+            <!-- Phase Result / Final Result Overlay -->
+            <div id="result-screen" class="overlay">
+                <div class="modal-card">
+                    <div class="progress-dots" id="progress-indicator">
+                        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+                    </div>
+                    <div id="result-icon" class="text-5xl mb-2">✅</div>
+                    <h2 id="result-title" class="text-2xl font-bold text-gray-800 mb-2">Trin 1 klaret!</h2>
+                    <p id="result-text" class="text-gray-600 mb-6 text-sm font-medium">Feedback</p>
+                    <button id="btn-next" class="btn btn-primary">Næste Trin</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // --- Data: 3-Trins Scenarier ---
+    // Hvert scenarie har 'phases'. En phase er enten type: 'action' (knapper) eller 'zone' (klik på bane).
+    const scenarios = [
+        {
+            id: 1,
+            title: "Vægspillet (1-2)",
+            phases: [
+                {
+                    type: 'action',
+                    actor: 1, // Focus on Player 1
+                    instruction: "Trin 1: Du er Spiller 1 (boldholder). Forsvaret presser hårdt. Hvad gør du?",
+                    start: { p1: {x: 150, y: 420}, p2: {x: 280, y: 380}, d: {x: 150, y: 350}, ball: {x: 150, y: 420} },
+                    options: [
+                        { id: 'pass', label: 'Aflever', correct: true, feedback: "Godt læst! Du slipper bolden inden modstanderen tackler dig.", end: { p1: {x: 150, y: 480}, p2: {x: 280, y: 420}, d: {x: 150, y: 400}, ball: {x: 280, y: 420} } },
+                        { id: 'dribble', label: 'Drible', correct: false, feedback: "Øv! Modstanderen kom i fuld fart og tacklede dig. Husk at aflevere væk fra presset.", end: { p1: {x: 150, y: 400}, p2: {x: 280, y: 420}, d: {x: 150, y: 400}, ball: {x: 150, y: 400} } }
+                    ]
+                },
+                {
+                    type: 'zone',
+                    actor: 1, // Styrer nu Spiller 1 (uden bold)
+                    instruction: "Trin 2: Du har lige afleveret. Hvor løber du hen for at få den tilbage?",
+                    start: { p1: {x: 150, y: 420}, p2: {x: 280, y: 380}, d: {x: 150, y: 380}, ball: {x: 280, y: 420} },
+                    zones: [
+                        { id: 'A', label: 'Stå stille', x: 150, y: 480, r: 30, correct: false, feedback: "Du stod stille og kiggede. Nu er forsvaret nede over din medspiller!", end: { p1: {x: 150, y: 480}, p2: {x: 280, y: 420}, d: {x: 250, y: 420}, ball: {x: 280, y: 420} } },
+                        { id: 'B', label: 'Løb frem', x: 150, y: 250, r: 35, correct: true, feedback: "Super løb! Du suser forbi forsvarsspilleren og tilbyder dig i bagrummet.", end: { p1: {x: 150, y: 250}, p2: {x: 280, y: 420}, d: {x: 200, y: 380}, ball: {x: 280, y: 420} } }
+                    ]
+                },
+                {
+                    type: 'action',
+                    actor: 2, // Nu er fokus på Spiller 2
+                    instruction: "Trin 3: Du (Spiller 2) har bolden, og din makker tager et løb i dybden!",
+                    start: { p1: {x: 150, y: 250}, p2: {x: 280, y: 420}, d: {x: 200, y: 380}, ball: {x: 280, y: 420} },
+                    options: [
+                        { id: 'pass', label: 'Spil i dybden', correct: true, feedback: "MÅÅÅL! Det er præcis sådan et perfekt vægspil ser ud!", end: { p1: {x: 150, y: 150}, p2: {x: 280, y: 420}, d: {x: 200, y: 300}, ball: {x: 150, y: 150} } },
+                        { id: 'dribble', label: 'Drible selv', correct: false, feedback: "Nej, du driblede ind i forsvaret og ignorerede din medspillers flotte løb.", end: { p1: {x: 150, y: 250}, p2: {x: 230, y: 380}, d: {x: 230, y: 380}, ball: {x: 230, y: 380} } }
+                    ]
+                }
+            ]
+        },
+        {
+            id: 2,
+            title: "Det Gyldne Overlap",
+            phases: [
+                {
+                    type: 'action',
+                    actor: 1,
+                    instruction: "Trin 1: Forsvaret bakker. Hvad gør du?",
+                    start: { p1: {x: 200, y: 480}, p2: {x: 280, y: 480}, d: {x: 200, y: 300}, ball: {x: 200, y: 480} },
+                    options: [
+                        { id: 'pass', label: 'Aflever', correct: false, feedback: "Det er for tidligt at aflevere. Forsvaret bakker, så tag rummet selv!", end: { p1: {x: 200, y: 480}, p2: {x: 280, y: 480}, d: {x: 200, y: 300}, ball: {x: 280, y: 480} } },
+                        { id: 'dribble', label: 'Driv frem', correct: true, feedback: "Godt! Du driver bolden frem for at lokke forsvarsspilleren ud til dig.", end: { p1: {x: 160, y: 350}, p2: {x: 280, y: 480}, d: {x: 180, y: 300}, ball: {x: 160, y: 350} } }
+                    ]
+                },
+                {
+                    type: 'zone',
+                    actor: 2, // Medspiller uden bold
+                    instruction: "Trin 2: Du er Spiller 2. Din makker dribler. Hvordan kan du hjælpe?",
+                    start: { p1: {x: 160, y: 350}, p2: {x: 280, y: 480}, d: {x: 180, y: 300}, ball: {x: 160, y: 350} },
+                    zones: [
+                        { id: 'A', label: 'Overlap', x: 330, y: 220, r: 35, correct: true, feedback: "Genialt løb! Du løber bagom din makker i et hurtigt 'overlap' ud på fløjen.", end: { p1: {x: 160, y: 350}, p2: {x: 330, y: 220}, d: {x: 170, y: 320}, ball: {x: 160, y: 350} } },
+                        { id: 'B', label: 'Løb bagved', x: 160, y: 450, r: 30, correct: false, feedback: "Du løber bare bagved bolden i samme spor. Det giver ingen overtal.", end: { p1: {x: 160, y: 350}, p2: {x: 160, y: 420}, d: {x: 160, y: 330}, ball: {x: 160, y: 350} } }
+                    ]
+                },
+                {
+                    type: 'action',
+                    actor: 1, // Boldholder igen
+                    instruction: "Trin 3: Du (Spiller 1) trækker forsvaret. Din makker suser forbi i overlappet!",
+                    start: { p1: {x: 160, y: 350}, p2: {x: 330, y: 220}, d: {x: 170, y: 320}, ball: {x: 160, y: 350} },
+                    options: [
+                        { id: 'pass', label: 'Aflever i løbet', correct: true, feedback: "MÅÅÅL! Modstanderen kiggede på dig, og du afleverede til et perfekt overlap!", end: { p1: {x: 160, y: 350}, p2: {x: 330, y: 150}, d: {x: 170, y: 300}, ball: {x: 330, y: 150} } },
+                        { id: 'dribble', label: 'Drible videre', correct: false, feedback: "Du blev grådig! Modstanderen stod klar og tacklede dig, mens din makker løb forgæves.", end: { p1: {x: 160, y: 330}, p2: {x: 330, y: 150}, d: {x: 160, y: 330}, ball: {x: 160, y: 330} } }
+                    ]
+                }
+            ]
+        },
+        {
+            id: 3,
+            title: "Træk Forsvaret Væk",
+            phases: [
+                {
+                    type: 'zone',
+                    actor: 2, // Starter som Spiller 2 (uden bold)
+                    instruction: "Trin 1: Du er Spiller 2 (Uden bold). Din makker dribler mod midten.",
+                    start: { p1: {x: 200, y: 450}, p2: {x: 280, y: 400}, d: {x: 200, y: 300}, ball: {x: 200, y: 450} },
+                    zones: [
+                        { id: 'A', label: 'Mod midten', x: 200, y: 350, r: 30, correct: false, feedback: "I løber sammen og gør det let for forsvaret at dække jer begge to!", end: { p1: {x: 200, y: 380}, p2: {x: 220, y: 350}, d: {x: 200, y: 350}, ball: {x: 200, y: 380} } },
+                        { id: 'B', label: 'Træk kanten', x: 350, y: 250, r: 35, correct: true, feedback: "Klogt! Du løber ud mod fløjen og trækker forsvarsspilleren med dig væk fra midten.", end: { p1: {x: 200, y: 380}, p2: {x: 350, y: 250}, d: {x: 280, y: 300}, ball: {x: 200, y: 380} } }
+                    ]
+                },
+                {
+                    type: 'action',
+                    actor: 1, // Boldholder
+                    instruction: "Trin 2: Du (Spiller 1) ser at forsvaret løb med din makker. Midten er åben!",
+                    start: { p1: {x: 200, y: 380}, p2: {x: 350, y: 250}, d: {x: 280, y: 300}, ball: {x: 200, y: 380} },
+                    options: [
+                        { id: 'pass', label: 'Aflever', correct: false, feedback: "Det var for svært. Forsvaret løb netop med din makker for at blokere afleveringen.", end: { p1: {x: 200, y: 380}, p2: {x: 350, y: 250}, d: {x: 280, y: 290}, ball: {x: 280, y: 290} } },
+                        { id: 'dribble', label: 'Drible frem', correct: true, feedback: "Godt opfattet! Din makker åbnede midten for dig, og du tager pladsen hurtigt.", end: { p1: {x: 200, y: 250}, p2: {x: 350, y: 200}, d: {x: 280, y: 280}, ball: {x: 200, y: 250} } }
+                    ]
+                },
+                {
+                    type: 'action',
+                    actor: 1, // Afslutning
+                    instruction: "Trin 3: Du er helt alene igennem centralt foran mål!",
+                    start: { p1: {x: 200, y: 250}, p2: {x: 350, y: 200}, d: {x: 280, y: 280}, ball: {x: 200, y: 250} },
+                    options: [
+                        { id: 'shoot', label: 'Afslut mod mål', correct: true, feedback: "MÅÅÅÅL! Det hele startede med det kloge løb uden bold. Flot!", end: { p1: {x: 200, y: 200}, p2: {x: 350, y: 150}, d: {x: 250, y: 250}, ball: {x: 200, y: 50} } },
+                        { id: 'pass', label: 'Stop op', correct: false, feedback: "Du stoppede op, og så nåede forsvaret at løbe dig op bagfra.", end: { p1: {x: 200, y: 250}, p2: {x: 350, y: 200}, d: {x: 200, y: 250}, ball: {x: 200, y: 250} } }
+                    ]
+                }
+            ]
+        }
+    ];
+
+    // --- State & Variabler ---
+    const canvas = document.getElementById('tacticBoard');
+    const ctx = canvas.getContext('2d');
+    
+    let currentScenIdx = 0;
+    let currentPhaseIdx = 0;
+    
+    // States: IDLE, WAITING, ANIMATING, RESULT
+    let gameState = "IDLE"; 
+    
+    let positions = { p1: {x:0, y:0}, p2: {x:0, y:0}, d: {x:0, y:0}, ball: {x:0, y:0} };
+    let targetPositions = null;
+    let isChoiceCorrect = false;
+    let currentFeedback = "";
+    
+    let animStartTime = 0;
+    const ANIM_DURATION = 1200; // ms
+    let reqAnimFrame;
+    let particles = [];
+
+    // UI Referencer
+    const ui = {
+        title: document.getElementById('scenario-title'),
+        intro: document.getElementById('intro-screen'),
+        result: document.getElementById('result-screen'),
+        banner: document.getElementById('top-banner'),
+        bannerText: document.getElementById('banner-text'),
+        decisionPanel: document.getElementById('decision-panel'),
+        btnStart: document.getElementById('btn-start'),
+        btnNext: document.getElementById('btn-next'),
+        dots: document.querySelectorAll('.dot')
+    };
+
+    // --- Hjælpefunktioner ---
+    function lerp(start, end, t) { return start + (end - start) * t; }
+    function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+    function distance(p1, p2) { return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2)); }
+
+    function updateDots() {
+        ui.dots.forEach((dot, index) => {
+            dot.className = 'dot';
+            if (index < currentPhaseIdx) dot.classList.add('filled');
+            else if (index === currentPhaseIdx) dot.classList.add('current');
+        });
+    }
+
+    // --- Tegnefunktioner ---
+    function drawField() {
+        for (let i = 0; i < canvas.height; i += 40) {
+            ctx.fillStyle = (i / 40) % 2 === 0 ? '#4ade80' : '#22c55e';
+            ctx.fillRect(0, i, canvas.width, 40);
+        }
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.rect(80, -5, 240, 120); ctx.rect(130, -5, 140, 40); ctx.stroke();
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(150, 0, 100, 15);
+        ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1; ctx.beginPath();
+        for(let i = 150; i <= 250; i += 10) { ctx.moveTo(i, 0); ctx.lineTo(i, 15); }
+        for(let i = 0; i <= 15; i += 5) { ctx.moveTo(150, i); ctx.lineTo(250, i); }
+        ctx.stroke();
+    }
+
+    function drawPlayer(x, y, color, text, isControlled, size=14) {
+        // Kontrol indikator (lysende gul aura hvis det er dig)
+        if (isControlled && gameState === "WAITING") {
+            ctx.beginPath();
+            ctx.arc(x, y, size + 6 + Math.sin(Date.now()/150)*2, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(253, 224, 71, 0.6)';
+            ctx.fill();
+        }
+
+        // Skygge
+        ctx.beginPath(); ctx.arc(x, y + 4, size, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fill();
+
+        // Krop
+        ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill();
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
+
+        // Tekst
+        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 12px Inter';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(text, x, y + 1);
+    }
+
+    function drawBall(x, y) {
+        ctx.beginPath(); ctx.arc(x + 2, y + 2, 6, 0, Math.PI * 2); ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fillStyle = '#ffffff'; ctx.fill();
+        ctx.strokeStyle = '#000000'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI*2); ctx.fill();
+    }
+
+    function drawPhaseUI() {
+        let phase = scenarios[currentScenIdx].phases[currentPhaseIdx];
+        if (gameState !== "WAITING") return;
+
+        if (phase.type === 'zone') {
+            let pulse = Math.sin(Date.now() / 200) * 2;
+            phase.zones.forEach(z => {
+                ctx.beginPath(); ctx.arc(z.x, z.y, z.r + pulse, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(253, 224, 71, 0.9)'; ctx.lineWidth = 3; ctx.setLineDash([6, 6]); ctx.stroke();
+                ctx.fillStyle = 'rgba(253, 224, 71, 0.2)'; ctx.fill(); ctx.setLineDash([]);
+                ctx.fillStyle = '#000'; ctx.font = 'bold 14px Inter';
+                let w = ctx.measureText(z.id).width;
+                ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillRect(z.x - w/2 - 4, z.y - 10, w + 8, 20);
+                ctx.fillStyle = '#000'; ctx.fillText(z.id, z.x, z.y + 1);
+            });
+        }
+    }
+
+    function drawConfetti() {
+        particles.forEach(p => {
+            ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size);
+            p.x += p.vx; p.y += p.vy; p.vy += 0.1;
+        });
+    }
+
+    // --- Core Logic ---
+    function initPhase() {
+        let sc = scenarios[currentScenIdx];
+        let phase = sc.phases[currentPhaseIdx];
+        
+        ui.title.innerText = sc.title;
+        updateDots();
+        
+        // Sæt start positioner
+        positions.p1 = { ...phase.start.p1 };
+        positions.p2 = { ...phase.start.p2 };
+        positions.d  = { ...phase.start.d };
+        positions.ball = { ...phase.start.ball };
+
+        // Opdater UI
+        ui.bannerText.innerText = phase.instruction;
+        ui.banner.classList.add('active');
+        ui.result.classList.remove('active');
+        
+        if (phase.type === 'action') {
+            document.getElementById('btn-opt-1').innerText = phase.options[0].label;
+            document.getElementById('btn-opt-2').innerText = phase.options[1].label;
+            ui.decisionPanel.classList.add('active');
+        } else {
+            ui.decisionPanel.classList.remove('active');
+        }
+
+        gameState = "WAITING";
+        animStartTime = 0;
+        
+        if (!reqAnimFrame) reqAnimFrame = requestAnimationFrame(render);
+    }
+
+    function handleChoice(isCorrect, feedback, endPos) {
+        isChoiceCorrect = isCorrect;
+        currentFeedback = feedback;
+        targetPositions = endPos;
+        
+        ui.decisionPanel.classList.remove('active');
+        ui.banner.classList.remove('active');
+        
+        gameState = "ANIMATING";
+        animStartTime = 0;
+
+        if (isCorrect && currentPhaseIdx === scenarios[currentScenIdx].phases.length - 1) {
+            // Skab konfetti ved mål/sidste trin
+            particles = [];
+            const cols = ['#fde047', '#3b82f6', '#ef4444', '#10b981'];
+            for(let i=0; i<80; i++) particles.push({ x: 200 + (Math.random()-0.5)*50, y: 275, vx: (Math.random()-0.5)*10, vy: (Math.random()-1)*10-2, size: Math.random()*6+4, color: cols[Math.floor(Math.random()*cols.length)] });
+        }
+    }
+
+    // Action knapper clicks
+    document.getElementById('btn-opt-1').addEventListener('click', () => {
+        if(gameState !== "WAITING") return;
+        let opt = scenarios[currentScenIdx].phases[currentPhaseIdx].options[0];
+        handleChoice(opt.correct, opt.feedback, opt.end);
+    });
+    document.getElementById('btn-opt-2').addEventListener('click', () => {
+        if(gameState !== "WAITING") return;
+        let opt = scenarios[currentScenIdx].phases[currentPhaseIdx].options[1];
+        handleChoice(opt.correct, opt.feedback, opt.end);
+    });
+
+    // Zone clicks på Canvas
+    function handleCanvasClick(e) {
+        if (gameState !== "WAITING") return;
+        let phase = scenarios[currentScenIdx].phases[currentPhaseIdx];
+        if (phase.type !== 'zone') return;
+
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        let clientX = e.clientX || (e.touches && e.touches[0].clientX);
+        let clientY = e.clientY || (e.touches && e.touches[0].clientY);
+        
+        const cx = (clientX - rect.left) * scaleX;
+        const cy = (clientY - rect.top) * scaleY;
+
+        for (let z of phase.zones) {
+            if (distance({x: cx, y: cy}, {x: z.x, y: z.y}) <= z.r + 15) {
+                handleChoice(z.correct, z.feedback, z.end);
+                break;
+            }
+        }
+    }
+    canvas.addEventListener('mousedown', handleCanvasClick);
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleCanvasClick(e); }, {passive: false});
+
+
+    function render(timestamp) {
+        if (gameState === "ANIMATING") {
+            if (!animStartTime) animStartTime = timestamp;
+            let t = Math.min((timestamp - animStartTime) / ANIM_DURATION, 1);
+            let easeT = easeOut(t);
+
+            let startPos = scenarios[currentScenIdx].phases[currentPhaseIdx].start;
+            
+            positions.p1.x = lerp(startPos.p1.x, targetPositions.p1.x, easeT);
+            positions.p1.y = lerp(startPos.p1.y, targetPositions.p1.y, easeT);
+            positions.p2.x = lerp(startPos.p2.x, targetPositions.p2.x, easeT);
+            positions.p2.y = lerp(startPos.p2.y, targetPositions.p2.y, easeT);
+            positions.d.x = lerp(startPos.d.x, targetPositions.d.x, easeT);
+            positions.d.y = lerp(startPos.d.y, targetPositions.d.y, easeT);
+            positions.ball.x = lerp(startPos.ball.x, targetPositions.ball.x, easeT);
+            positions.ball.y = lerp(startPos.ball.y, targetPositions.ball.y, easeT);
+
+            if (t >= 1) {
+                gameState = "RESULT";
+                showPhaseResult();
+            }
+        }
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawField();
+        drawPhaseUI();
+
+        let phase = scenarios[currentScenIdx]?.phases[currentPhaseIdx];
+        
+        drawPlayer(positions.p2.x, positions.p2.y, '#3b82f6', '2', phase?.actor === 2); 
+        drawPlayer(positions.d.x, positions.d.y, '#ef4444', 'F', false);  
+        drawPlayer(positions.p1.x, positions.p1.y, '#2563eb', '1', phase?.actor === 1); 
+        drawBall(positions.ball.x, positions.ball.y);
+
+        if (gameState === "RESULT" && isChoiceCorrect && currentPhaseIdx === scenarios[currentScenIdx].phases.length - 1) {
+            drawConfetti();
+        }
+
+        reqAnimFrame = requestAnimationFrame(render);
+    }
+
+    function showPhaseResult() {
+        const title = document.getElementById('result-title');
+        const icon = document.getElementById('result-icon');
+        const text = document.getElementById('result-text');
+        
+        let sc = scenarios[currentScenIdx];
+        let isLastPhase = currentPhaseIdx === sc.phases.length - 1;
+
+        text.innerText = currentFeedback;
+
+        if (isChoiceCorrect) {
+            icon.innerText = isLastPhase ? "⚽️🏆" : "✅";
+            title.innerText = isLastPhase ? "Mål! Perfekt Angreb!" : `Trin ${currentPhaseIdx + 1} Klaret!`;
+            title.style.color = "#15803d";
+            ui.btnNext.innerText = isLastPhase ? "Næste Scenarie" : "Næste Trin";
+            ui.btnNext.className = "btn btn-primary";
+        } else {
+            icon.innerText = "❌";
+            title.innerText = "Prøv Igen!";
+            title.style.color = "#b91c1c";
+            ui.btnNext.innerText = "Prøv dette trin igen";
+            ui.btnNext.className = "btn btn-action"; // Gør knappen lidt rød/orange for at signalere retry
+        }
+
+        ui.result.classList.add('active');
+    }
+
+    // Globale events
+    ui.btnStart.addEventListener('click', () => {
+        ui.intro.classList.remove('active');
+        initPhase();
+    });
+
+    ui.btnNext.addEventListener('click', () => {
+        if (isChoiceCorrect) {
+            currentPhaseIdx++;
+            if (currentPhaseIdx >= scenarios[currentScenIdx].phases.length) {
+                // Skift til næste scenarie
+                currentScenIdx++;
+                currentPhaseIdx = 0;
+                if (currentScenIdx >= scenarios.length) currentScenIdx = 0; // Start forfra
+            }
+        }
+        initPhase();
+    });
+
+    // Start
+    drawField();
+
+</script>
+</body>
+</html>

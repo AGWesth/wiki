@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Taktiktavle: Aflever eller Drible</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            touch-action: manipulation; /* Forbedrer touch på mobil/iPad */
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            background-color: #4ade80; /* Græsplæne farve */
+        }
+
+        /* UI Overlays */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 1.5rem;
+            text-align: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            font-weight: 700;
+            padding: 1rem 2rem;
+            border-radius: 9999px;
+            border: 4px solid white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: transform 0.1s, box-shadow 0.1s;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 1rem;
+            font-size: 1.25rem;
+        }
+        
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .btn-pass {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+        }
+
+        .btn-dribble {
+            background: linear-gradient(135deg, #10b981, #059669);
+        }
+
+        /* Decision Panel i bunden under frys-fasen */
+        #decision-panel {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+            padding: 3rem 1.5rem 1.5rem 1.5rem;
+            display: flex;
+            gap: 1rem;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+        }
+
+        #decision-panel.active {
+            transform: translateY(0);
+        }
+
+        .modal-card {
+            background: white;
+            border-radius: 1rem;
+            padding: 2rem 1.5rem;
+            width: 100%;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <div id="game-container">
+        <!-- Header -->
+        <div class="bg-gray-900 text-white p-4 text-center">
+            <h1 class="text-xl font-extrabold uppercase tracking-wider">Beslutningstagen</h1>
+            <p class="text-sm text-gray-300">U10 & U11 Fodbold</p>
+        </div>
+
+        <!-- Canvas -->
+        <div class="relative">
+            <canvas id="tacticBoard" width="400" height="550"></canvas>
+
+            <!-- Start Screen Overlay -->
+            <div id="intro-screen" class="overlay active">
+                <div class="modal-card">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-2">2 mod 1 Træning</h2>
+                    <p class="text-gray-600 mb-6 text-sm">
+                        Du er den blå spiller med bolden. Læs spillet og træf den rigtige beslutning: Skal du <strong>aflevere</strong> til din medspiller eller <strong>drible</strong> selv?
+                    </p>
+                    <button id="btn-start" class="btn">Start Træning</button>
+                </div>
+            </div>
+
+            <!-- Decision Panel -->
+            <div id="decision-panel">
+                <button id="btn-decide-pass" class="btn btn-pass w-1/2 text-lg">Aflever</button>
+                <button id="btn-decide-dribble" class="btn btn-dribble w-1/2 text-lg">Drible</button>
+            </div>
+
+            <!-- Result Overlay -->
+            <div id="result-screen" class="overlay">
+                <div class="modal-card">
+                    <div id="result-icon" class="text-6xl mb-2">✅</div>
+                    <h2 id="result-title" class="text-2xl font-bold text-gray-800 mb-2">Godt læst!</h2>
+                    <p id="result-text" class="text-gray-600 mb-6 text-sm font-medium">Feedback tekst kommer her.</p>
+                    <button id="btn-next" class="btn">Næste Situation</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // --- Scenarier (Levels) ---
+    // Koordinatsystem: X: 0-400, Y: 0-550. Målet er i toppen (Y: 20-50).
+    const scenarios = [
+        {
+            id: 1,
+            title: "Forsvarsspilleren presser",
+            desc: "Modspiller løber direkte mod boldholderen.",
+            start: { a1: {x: 150, y: 480}, a2: {x: 300, y: 450}, d: {x: 180, y: 250} },
+            decisionPhase: { a1: {x: 150, y: 380}, a2: {x: 300, y: 320}, d: {x: 160, y: 330} },
+            correctChoice: "pass",
+            feedbackCorrect: "Flot! Modspilleren gik imod dig, så din medspiller blev helt fri. Perfekt aflevering!",
+            feedbackWrong: "Øv! Du løb direkte ind i forsvarsspilleren. Når modspilleren presser dig, skal du aflevere til den frie medspiller."
+        },
+        {
+            id: 2,
+            title: "Forsvarsspilleren dækker afleveringen",
+            desc: "Modspilleren prøver at dække af for afleveringen.",
+            start: { a1: {x: 200, y: 480}, a2: {x: 320, y: 450}, d: {x: 250, y: 250} },
+            decisionPhase: { a1: {x: 200, y: 380}, a2: {x: 320, y: 320}, d: {x: 290, y: 320} },
+            correctChoice: "dribble",
+            feedbackCorrect: "Super læst! Modspilleren dækkede afleveringen, så du tog pladsen foran dig og driblede. Flot mål!",
+            feedbackWrong: "Åh nej! Modspilleren dækkede din medspiller og snuppede afleveringen. Kig op, og tag pladsen selv, når afleveringen er dækket."
+        },
+        {
+            id: 3,
+            title: "Forsvarsspilleren bakker",
+            desc: "Modspilleren er bange og bakker ned mod målet.",
+            start: { a1: {x: 150, y: 480}, a2: {x: 80, y: 430}, d: {x: 200, y: 350} },
+            decisionPhase: { a1: {x: 150, y: 380}, a2: {x: 80, y: 330}, d: {x: 200, y: 200} },
+            correctChoice: "dribble",
+            feedbackCorrect: "Godt valgt! Modspilleren bakkede, så der var masser af plads til at drible frem mod målet.",
+            feedbackWrong: "Det var for tidligt at aflevere. Modspilleren bakkede bare. Drible bolden fremad indtil forsvaret angriber dig."
+        },
+        {
+            id: 4,
+            title: "Fantastisk løb i dybden",
+            desc: "Din medspiller tager et hurtigt løb ind bag forsvaret.",
+            start: { a1: {x: 280, y: 480}, a2: {x: 120, y: 450}, d: {x: 220, y: 300} },
+            decisionPhase: { a1: {x: 300, y: 330}, a2: {x: 100, y: 150}, d: {x: 270, y: 330} },
+            correctChoice: "pass",
+            feedbackCorrect: "Virkelig flot overblik! Du trak forsvaret væk, og spillede din medspiller helt fri i dybden.",
+            feedbackWrong: "Du glemte at kigge op! Din medspiller var helt fri i den anden side, og du løb ind i forsvaret."
+        },
+        {
+            id: 5,
+            title: "Det gyldne Overlap",
+            desc: "Din medspiller løber bag om ryggen på dig for at hjælpe.",
+            start: { a1: {x: 200, y: 480}, a2: {x: 300, y: 480}, d: {x: 200, y: 300} },
+            decisionPhase: { a1: {x: 180, y: 350}, a2: {x: 320, y: 250}, d: {x: 180, y: 280} },
+            correctChoice: "pass",
+            feedbackCorrect: "Klasse! Din medspiller lavede et fantastisk overlap. Forsvaret kiggede på dig, så afleveringen var perfekt!",
+            feedbackWrong: "Øv! Forsvaret var klar på dig. Du skal huske at bruge din medspiller, når hun tager det hårde løb forbi dig."
+        },
+        {
+            id: 6,
+            title: "Falsk løb åbner midten",
+            desc: "Medspilleren trækker modstanderen med sig væk fra midten.",
+            start: { a1: {x: 150, y: 480}, a2: {x: 250, y: 450}, d: {x: 200, y: 350} },
+            decisionPhase: { a1: {x: 150, y: 350}, a2: {x: 350, y: 250}, d: {x: 300, y: 300} },
+            correctChoice: "dribble",
+            feedbackCorrect: "Høj fodbold-IQ! Din medspiller trak forsvaret helt væk, så midten blev pivåben. Flot dribletur mod mål!",
+            feedbackWrong: "Pas på! Afleveringen blev for svær, fordi forsvaret løb med din medspiller. Du skulle have brugt pladsen foran dig selv."
+        },
+        {
+            id: 7,
+            title: "Mandsopdækning",
+            desc: "Forsvarsspilleren glemmer bolden og kigger kun på din medspiller.",
+            start: { a1: {x: 180, y: 480}, a2: {x: 320, y: 450}, d: {x: 300, y: 350} },
+            decisionPhase: { a1: {x: 180, y: 350}, a2: {x: 320, y: 300}, d: {x: 320, y: 320} },
+            correctChoice: "dribble",
+            feedbackCorrect: "Rigtig godt set! Modstanderen glemte alt om dig for at dække din medspiller. Du havde fri bane til mål!",
+            feedbackWrong: "Nej, din medspiller var totalt lukket ned. Når modstanderen mandsopdækker hende, skal du selv tage teten og drible!"
+        },
+        {
+            id: 8,
+            title: "Det lynhurtige pres",
+            desc: "Forsvarsspilleren stormer frem mod dig i højt tempo.",
+            start: { a1: {x: 200, y: 480}, a2: {x: 80, y: 480}, d: {x: 200, y: 250} },
+            decisionPhase: { a1: {x: 200, y: 400}, a2: {x: 80, y: 320}, d: {x: 200, y: 350} },
+            correctChoice: "pass",
+            feedbackCorrect: "Hurtig opfattelse! Forsvaret kom flyvende mod dig, så du spillede den hurtigt videre til din frie medspiller.",
+            feedbackWrong: "Du nåede ikke at drible. Når de presser så hurtigt og aggressivt, skal bolden spilles videre med det samme."
+        },
+        {
+            id: 9,
+            title: "Vend spillet (Skift side)",
+            desc: "Du er spærret i venstre side, men der er plads i højre.",
+            start: { a1: {x: 50, y: 480}, a2: {x: 350, y: 480}, d: {x: 100, y: 350} },
+            decisionPhase: { a1: {x: 80, y: 350}, a2: {x: 320, y: 250}, d: {x: 100, y: 250} },
+            correctChoice: "pass",
+            feedbackCorrect: "Kanon overblik! Vejen frem var blokeret, men du løftede hovedet og fandt din medspiller på den helt åbne side.",
+            feedbackWrong: "Du kørte fast! Forsvaret lukkede siden helt ned. Husk at kigge op – ofte er den modsatte side af banen helt fri."
+        },
+        {
+            id: 10,
+            title: "Den passive forsvarer",
+            desc: "Forsvarsspilleren står stille og venter tæt på målet.",
+            start: { a1: {x: 200, y: 480}, a2: {x: 100, y: 450}, d: {x: 200, y: 200} },
+            decisionPhase: { a1: {x: 200, y: 350}, a2: {x: 100, y: 300}, d: {x: 200, y: 200} },
+            correctChoice: "dribble",
+            feedbackCorrect: "Flot gåpåmod! Når forsvaret er bange og bliver nede ved målet, skal du turde drible frem og udfordre dem tæt på.",
+            feedbackWrong: "Det var for usikkert at aflevere endnu. Brug pladsen til at føre bolden frem, indtil forsvaret er tvunget ud for at stoppe dig."
+        }
+    ];
+
+    // --- State og Variabler ---
+    const canvas = document.getElementById('tacticBoard');
+    const ctx = canvas.getContext('2d');
+    
+    let currentScenarioIndex = 0;
+    let gameState = "IDLE"; // IDLE, ANIMATING_PRE, WAITING_DECISION, ANIMATING_POST, SHOW_RESULT
+    
+    let positions = { a1: {x:0, y:0}, a2: {x:0, y:0}, d: {x:0, y:0}, ball: {x:0, y:0} };
+    let playerChoice = null;
+    let isChoiceCorrect = false;
+    
+    // Animation control
+    let animStartTime = 0;
+    const PRE_ANIM_DURATION = 1500; // ms
+    const POST_ANIM_DURATION = 1500; // ms
+    let reqAnimFrame;
+
+    // Confetti
+    let particles = [];
+
+    // UI Elements
+    const introScreen = document.getElementById('intro-screen');
+    const decisionPanel = document.getElementById('decision-panel');
+    const resultScreen = document.getElementById('result-screen');
+    const btnStart = document.getElementById('btn-start');
+    const btnPass = document.getElementById('btn-decide-pass');
+    const btnDribble = document.getElementById('btn-decide-dribble');
+    const btnNext = document.getElementById('btn-next');
+
+    // --- Hjælpefunktioner ---
+    function lerp(start, end, t) {
+        return start + (end - start) * t;
+    }
+    
+    // Smooth easing
+    function easeOutCubic(t) {
+        return 1 - Math.pow(1 - t, 3);
+    }
+
+    // --- Tegne Funktioner ---
+    function drawField() {
+        // Græsstriber
+        for (let i = 0; i < canvas.height; i += 40) {
+            ctx.fillStyle = (i / 40) % 2 === 0 ? '#4ade80' : '#22c55e';
+            ctx.fillRect(0, i, canvas.width, 40);
+        }
+
+        // Kridtstreger
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        // Straffesparksfelt
+        ctx.rect(80, -5, 240, 120);
+        // Målfelt
+        ctx.rect(130, -5, 140, 40);
+        ctx.stroke();
+        
+        // Mål (Goal)
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(150, 0, 100, 15);
+        // Målnet illusion
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for(let i = 150; i <= 250; i += 10) { ctx.moveTo(i, 0); ctx.lineTo(i, 15); }
+        for(let i = 0; i <= 15; i += 5) { ctx.moveTo(150, i); ctx.lineTo(250, i); }
+        ctx.stroke();
+    }
+
+    function drawPlayer(x, y, color, text, size=14) {
+        // Skygge
+        ctx.beginPath();
+        ctx.arc(x, y + 4, size, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fill();
+
+        // Krop
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Tekst
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px Inter';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, x, y + 1);
+    }
+
+    function drawBall(x, y) {
+        // Skygge
+        ctx.beginPath();
+        ctx.arc(x + 2, y + 2, 6, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fill();
+
+        // Bold
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Mønster (simple prikker)
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x-3, y-2, 1.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x+3, y+2, 1.5, 0, Math.PI*2); ctx.fill();
+    }
+
+    function drawArrows() {
+        // Tegn gule stiplede linjer for at vise mulighederne under beslutningsfasen
+        ctx.strokeStyle = 'rgba(253, 224, 71, 0.8)'; // Gul
+        ctx.lineWidth = 4;
+        ctx.setLineDash([8, 8]);
+        
+        // Afleveringspil
+        ctx.beginPath();
+        ctx.moveTo(positions.a1.x, positions.a1.y);
+        ctx.lineTo(positions.a2.x, positions.a2.y);
+        ctx.stroke();
+        
+        // Driblepil (ret frem mod mål)
+        ctx.beginPath();
+        ctx.moveTo(positions.a1.x, positions.a1.y);
+        ctx.lineTo(positions.a1.x, positions.a1.y - 120);
+        ctx.stroke();
+
+        ctx.setLineDash([]); // Reset
+    }
+
+    function drawConfetti() {
+        particles.forEach(p => {
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x, p.y, p.size, p.size);
+        });
+    }
+
+    // --- Logik og Animation ---
+    function render(timestamp) {
+        if (!animStartTime) animStartTime = timestamp;
+        let elapsed = timestamp - animStartTime;
+
+        let sc = scenarios[currentScenarioIndex];
+
+        // Opdater logik baseret på state
+        if (gameState === "ANIMATING_PRE") {
+            let t = Math.min(elapsed / PRE_ANIM_DURATION, 1);
+            let easeT = easeOutCubic(t);
+
+            positions.a1.x = lerp(sc.start.a1.x, sc.decisionPhase.a1.x, easeT);
+            positions.a1.y = lerp(sc.start.a1.y, sc.decisionPhase.a1.y, easeT);
+            
+            positions.a2.x = lerp(sc.start.a2.x, sc.decisionPhase.a2.x, easeT);
+            positions.a2.y = lerp(sc.start.a2.y, sc.decisionPhase.a2.y, easeT);
+            
+            positions.d.x = lerp(sc.start.d.x, sc.decisionPhase.d.x, easeT);
+            positions.d.y = lerp(sc.start.d.y, sc.decisionPhase.d.y, easeT);
+
+            // Bolden følger A1 (højre fod)
+            positions.ball.x = positions.a1.x + 10;
+            positions.ball.y = positions.a1.y - 10;
+
+            if (t >= 1) {
+                gameState = "WAITING_DECISION";
+                decisionPanel.classList.add('active');
+            }
+        } 
+        else if (gameState === "ANIMATING_POST") {
+            let t = Math.min(elapsed / POST_ANIM_DURATION, 1);
+            let easeT = easeOutCubic(t);
+
+            if (playerChoice === 'pass') {
+                if (isChoiceCorrect) {
+                    // Rigtigt: Afleverer til A2, som derefter løber lidt mod mål.
+                    if (t < 0.5) { // Bolden triller
+                        let subT = t / 0.5;
+                        positions.ball.x = lerp(sc.decisionPhase.a1.x + 10, sc.decisionPhase.a2.x - 10, subT);
+                        positions.ball.y = lerp(sc.decisionPhase.a1.y - 10, sc.decisionPhase.a2.y + 10, subT);
+                    } else { // A2 skyder/løber lidt
+                        let subT = (t - 0.5) / 0.5;
+                        positions.a2.y = lerp(sc.decisionPhase.a2.y, sc.decisionPhase.a2.y - 40, subT);
+                        positions.ball.x = positions.a2.x;
+                        positions.ball.y = positions.a2.y - 15;
+                    }
+                } else {
+                    // Forkert: Forsvaren snupper bolden halvvejs.
+                    if (t < 0.5) {
+                        let subT = t / 0.5;
+                        // Bold mod A2
+                        positions.ball.x = lerp(sc.decisionPhase.a1.x + 10, sc.decisionPhase.a2.x, subT);
+                        positions.ball.y = lerp(sc.decisionPhase.a1.y - 10, sc.decisionPhase.a2.y, subT);
+                        // Forsvar mod bold
+                        positions.d.x = lerp(sc.decisionPhase.d.x, positions.ball.x, subT);
+                        positions.d.y = lerp(sc.decisionPhase.d.y, positions.ball.y, subT);
+                    }
+                }
+            } else if (playerChoice === 'dribble') {
+                if (isChoiceCorrect) {
+                    // Rigtigt: A1 dribler mod mål
+                    positions.a1.y = lerp(sc.decisionPhase.a1.y, sc.decisionPhase.a1.y - 100, easeT);
+                    positions.ball.x = positions.a1.x + 10;
+                    positions.ball.y = positions.a1.y - 15;
+                } else {
+                    // Forkert: A1 dribler frem, men Forsvar tackler.
+                    if (t < 0.5) {
+                        let subT = t / 0.5;
+                        positions.a1.y = lerp(sc.decisionPhase.a1.y, sc.decisionPhase.a1.y - 40, subT);
+                        positions.ball.x = positions.a1.x + 10;
+                        positions.ball.y = positions.a1.y - 10;
+                        // Forsvar mod A1
+                        positions.d.x = lerp(sc.decisionPhase.d.x, positions.a1.x, subT);
+                        positions.d.y = lerp(sc.decisionPhase.d.y, positions.a1.y - 15, subT);
+                    }
+                }
+            }
+
+            if (t >= 1) {
+                showResultScreen();
+                gameState = "SHOW_RESULT";
+            }
+        }
+        else if (gameState === "SHOW_RESULT" && isChoiceCorrect) {
+            // Opdater confetti
+            particles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.1; // Tyngdekraft
+            });
+        }
+
+        // --- Render Frame ---
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawField();
+
+        if (gameState === "WAITING_DECISION") {
+            drawArrows();
+        }
+
+        // Tegn spillere
+        drawPlayer(positions.a2.x, positions.a2.y, '#3b82f6', '2'); // Medspiller (Blå)
+        drawPlayer(positions.d.x, positions.d.y, '#ef4444', 'F');  // Forsvar (Rød)
+        drawPlayer(positions.a1.x, positions.a1.y, '#2563eb', '1'); // Dig (Mørkeblå)
+        drawBall(positions.ball.x, positions.ball.y);
+
+        if (gameState === "SHOW_RESULT" && isChoiceCorrect) {
+            drawConfetti();
+        }
+
+        reqAnimFrame = requestAnimationFrame(render);
+    }
+
+    function initScenario() {
+        let sc = scenarios[currentScenarioIndex];
+        
+        // Reset positions
+        positions.a1 = { ...sc.start.a1 };
+        positions.a2 = { ...sc.start.a2 };
+        positions.d  = { ...sc.start.d };
+        positions.ball = { x: positions.a1.x + 10, y: positions.a1.y - 10 };
+
+        introScreen.classList.remove('active');
+        resultScreen.classList.remove('active');
+        decisionPanel.classList.remove('active');
+
+        gameState = "ANIMATING_PRE";
+        animStartTime = 0;
+        
+        // Start animation loop hvis den ikke kører
+        if (!reqAnimFrame) {
+            reqAnimFrame = requestAnimationFrame(render);
+        }
+    }
+
+    function createConfetti() {
+        particles = [];
+        const colors = ['#fde047', '#3b82f6', '#ef4444', '#10b981', '#a855f7'];
+        for(let i=0; i<80; i++) {
+            particles.push({
+                x: canvas.width / 2 + (Math.random() - 0.5) * 50,
+                y: canvas.height / 2,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 1) * 10 - 2,
+                size: Math.random() * 6 + 4,
+                color: colors[Math.floor(Math.random() * colors.length)]
+            });
+        }
+    }
+
+    function handleDecision(choice) {
+        if (gameState !== "WAITING_DECISION") return;
+        
+        playerChoice = choice;
+        let sc = scenarios[currentScenarioIndex];
+        isChoiceCorrect = (choice === sc.correctChoice);
+        
+        decisionPanel.classList.remove('active');
+        gameState = "ANIMATING_POST";
+        animStartTime = 0;
+
+        if (isChoiceCorrect) {
+            createConfetti();
+        }
+    }
+
+    function showResultScreen() {
+        let sc = scenarios[currentScenarioIndex];
+        const icon = document.getElementById('result-icon');
+        const title = document.getElementById('result-title');
+        const text = document.getElementById('result-text');
+
+        if (isChoiceCorrect) {
+            icon.innerText = "⚽️👏";
+            title.innerText = "Korrekt Beslutning!";
+            title.style.color = "#15803d"; // Grøn tekst
+            text.innerText = sc.feedbackCorrect;
+        } else {
+            icon.innerText = "❌";
+            title.innerText = "Prøv igen!";
+            title.style.color = "#b91c1c"; // Rød tekst
+            text.innerText = sc.feedbackWrong;
+        }
+
+        // Tjek om det var sidste scenarie
+        if (currentScenarioIndex >= scenarios.length - 1 && isChoiceCorrect) {
+            btnNext.innerText = "Start Forfra";
+        } else {
+            btnNext.innerText = "Næste Situation";
+        }
+
+        resultScreen.classList.add('active');
+    }
+
+    // --- Event Listeners ---
+    btnStart.addEventListener('click', () => {
+        initScenario();
+    });
+
+    btnPass.addEventListener('click', () => handleDecision('pass'));
+    btnDribble.addEventListener('click', () => handleDecision('dribble'));
+
+    btnNext.addEventListener('click', () => {
+        if (isChoiceCorrect) {
+            // Gå kun videre hvis de fik det rigtigt (ellers skal de øve situationen igen)
+            currentScenarioIndex++;
+            if (currentScenarioIndex >= scenarios.length) {
+                currentScenarioIndex = 0; // Start forfra
+            }
+        }
+        initScenario();
+    });
+
+    // Initial tegn (før start)
+    drawField();
+
+</script>
+</body>
+</html>
