@@ -1,0 +1,1511 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Taktiktavle: Scenarie-bygger</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+            color: #0f172a;
+        }
+
+        .font-mono-code {
+            font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+
+        /* Canvas container maintains exact 400:550 aspect ratio */
+        .pitch-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            aspect-ratio: 400 / 550;
+            margin: 0 auto;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.1);
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #editorCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+
+        #editorCanvas.dragging {
+            cursor: grabbing;
+        }
+
+        /* Custom subtle scrollbar for code block */
+        .code-scroll::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        .code-scroll::-webkit-scrollbar-track {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        .code-scroll::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+        .code-scroll::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        /* Syntax highlight colors for dark code viewer */
+        .tok-key { color: #93c5fd; }
+        .tok-str { color: #86efac; }
+        .tok-num { color: #fcd34d; }
+        .tok-bool { color: #f472b6; }
+        .tok-punc { color: #94a3b8; }
+
+        @keyframes fadeSlideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-toast {
+            animation: fadeSlideUp 0.25s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Dark Header -->
+    <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-green-600 flex items-center justify-center shadow-inner text-xl">
+                    ⚽
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-extrabold tracking-tight leading-tight">
+                        Taktiktavle: Scenarie-bygger
+                    </h1>
+                    <p class="text-xs text-slate-400">
+                        Design scenarier &amp; eksportér direkte til dit 400×550 fodboldspil
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <!-- Reset button with inline two-step confirm (no native confirm()) -->
+                <button id="btn-reset" type="button"
+                    class="px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors flex items-center gap-1.5">
+                    <span>↺</span>
+                    <span id="btn-reset-text">Nulstil / Ny skabelon</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+            <!-- LEFT PANEL: Interactive Tactical Pitch -->
+            <section class="lg:col-span-5 bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5 flex flex-col gap-4">
+                
+                <!-- Mode Tabs above Canvas -->
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Redigeringstilstand</span>
+                        <span id="mode-hint" class="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                            Træk spillere &amp; zoner
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-1.5 bg-slate-100 p-1 rounded-xl" role="tablist">
+                        <button type="button" data-mode="setup"
+                            class="mode-tab py-2 px-1.5 rounded-lg text-xs font-bold transition-all text-center">
+                            Start
+                        </button>
+                        <button type="button" data-mode="A"
+                            class="mode-tab py-2 px-1.5 rounded-lg text-xs font-bold transition-all text-center">
+                            Udfald A
+                        </button>
+                        <button type="button" data-mode="B"
+                            class="mode-tab py-2 px-1.5 rounded-lg text-xs font-bold transition-all text-center">
+                            Udfald B
+                        </button>
+                        <button type="button" data-mode="C"
+                            class="mode-tab py-2 px-1.5 rounded-lg text-xs font-bold transition-all text-center">
+                            Udfald C
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Helper Toggles -->
+                <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs">
+                    <label class="flex items-center gap-2 cursor-pointer select-none font-medium text-slate-700">
+                        <input id="toggle-shadow" type="checkbox" checked class="w-4 h-4 rounded accent-slate-800 cursor-pointer">
+                        <span>Vis pasningsskygge (hjælpelinje)</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer select-none font-medium text-slate-700">
+                        <input id="toggle-grid" type="checkbox" checked class="w-4 h-4 rounded accent-blue-600 cursor-pointer">
+                        <span>Snap til gitter (10px)</span>
+                    </label>
+                </div>
+
+                <!-- 400x550 Tactical Canvas -->
+                <div class="pitch-wrapper">
+                    <canvas id="editorCanvas" width="400" height="550"></canvas>
+
+                    <!-- Live Coordinate Badge during Drag -->
+                    <div id="coord-badge"
+                        class="hidden absolute top-2.5 left-2.5 bg-slate-900/90 text-white text-xs font-mono-code px-2.5 py-1 rounded-lg shadow pointer-events-none z-10">
+                        x: 200, y: 350
+                    </div>
+
+                    <!-- Preview Phase Indicator -->
+                    <div id="preview-status"
+                        class="hidden absolute top-2.5 right-2.5 bg-amber-500 text-slate-950 text-xs font-bold px-2.5 py-1 rounded-full shadow pointer-events-none z-10">
+                        Afspiller...
+                    </div>
+
+                    <!-- Feedback Banner at End of Live Animation Preview -->
+                    <div id="preview-feedback-overlay"
+                        class="hidden absolute inset-x-3 bottom-3 bg-white/95 backdrop-blur-sm rounded-xl p-3.5 shadow-xl border border-slate-200 z-20 animate-toast">
+                        <div class="flex items-start gap-2.5">
+                            <div id="preview-fb-icon" class="text-2xl leading-none shrink-0">⚽️</div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between gap-2">
+                                    <h4 id="preview-fb-title" class="text-sm font-extrabold text-slate-900 truncate">Fremragende løb!</h4>
+                                    <button id="btn-close-preview" type="button"
+                                        class="text-xs font-bold text-slate-500 hover:text-slate-800 px-1.5 py-0.5 rounded bg-slate-100">
+                                        Luk
+                                    </button>
+                                </div>
+                                <p id="preview-fb-text" class="text-xs text-slate-600 mt-1 leading-relaxed"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Outcome Quick Actions (Shown in Outcome Mode A, B, or C) -->
+                <div id="outcome-actions" class="hidden bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-700">Hurtig-knapper for Udfald <span id="outcome-zone-label">A</span></span>
+                        <span class="text-[11px] text-slate-500">Træk 1, F eller bolden på banen</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <button id="btn-ball-to-zone" type="button"
+                            class="px-2.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shadow-sm">
+                            Bold → Zone (Pasning lykkes)
+                        </button>
+                        <button id="btn-ball-to-def" type="button"
+                            class="px-2.5 py-2 rounded-lg text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white transition-colors shadow-sm">
+                            Bold → Forsvar (Opsnappet)
+                        </button>
+                        <button id="btn-reset-outcome" type="button"
+                            class="px-2.5 py-2 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 transition-colors">
+                            Nulstil slutpositioner
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Animation Preview Bar -->
+                <div class="bg-slate-900 rounded-xl p-3 text-white flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-semibold text-slate-300">Test-animation:</span>
+                        <select id="preview-zone-select"
+                            class="bg-slate-800 border border-slate-700 text-white text-xs font-bold rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="A">Zone A</option>
+                            <option value="B">Zone B</option>
+                            <option value="C" selected>Zone C</option>
+                        </select>
+                    </div>
+                    <button id="btn-play-preview" type="button"
+                        class="flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 active:scale-95 text-white transition-all flex items-center justify-center gap-1.5 shadow">
+                        <span id="play-icon">▶</span>
+                        <span id="play-label">Afspil test-animation</span>
+                    </button>
+                </div>
+
+                <!-- Legend -->
+                <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-slate-500 pt-1">
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-blue-600 inline-block border border-white shadow-sm"></span> 1: Boldholder</span>
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-blue-500 inline-block border border-white shadow-sm"></span> 2: Medspiller</span>
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-500 inline-block border border-white shadow-sm"></span> F: Forsvar</span>
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full border-2 border-dashed border-yellow-400 bg-yellow-300/30 inline-block"></span> Zoner A/B/C</span>
+                </div>
+            </section>
+
+            <!-- RIGHT PANEL: Scenario Info, Zone Settings & Code Output -->
+            <section class="lg:col-span-7 flex flex-col gap-5">
+
+                <!-- 1. Scenarie Info Card -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                    <h2 class="text-sm font-extrabold uppercase tracking-wider text-slate-800 mb-3 flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center text-xs">1</span>
+                        Scenarie Info
+                    </h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <div>
+                            <label for="input-id" class="block text-xs font-semibold text-slate-600 mb-1">ID (nummer)</label>
+                            <input id="input-id" type="number" min="1" step="1" value="6"
+                                class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div class="sm:col-span-3">
+                            <label for="input-title" class="block text-xs font-semibold text-slate-600 mb-1">Scenarie Titel</label>
+                            <input id="input-title" type="text" placeholder="F.eks. Skab trekanten"
+                                class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div class="sm:col-span-4">
+                            <label for="input-desc" class="block text-xs font-semibold text-slate-600 mb-1">Beskrivelse (vises i intro-boksen)</label>
+                            <textarea id="input-desc" rows="2" placeholder="Forklar situationen for spilleren..."
+                                class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Zone-indstillinger Card -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <h2 class="text-sm font-extrabold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                            <span class="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center text-xs">2</span>
+                            Zone-indstillinger
+                        </h2>
+                        <!-- Zone Tabs A, B, C -->
+                        <div class="flex gap-1.5 bg-slate-100 p-1 rounded-xl">
+                            <button type="button" data-zone-tab="A" class="zone-tab px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5">
+                                Zone A <span id="badge-correct-A" class="hidden w-2 h-2 rounded-full bg-emerald-500"></span>
+                            </button>
+                            <button type="button" data-zone-tab="B" class="zone-tab px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5">
+                                Zone B <span id="badge-correct-B" class="hidden w-2 h-2 rounded-full bg-emerald-500"></span>
+                            </button>
+                            <button type="button" data-zone-tab="C" class="zone-tab px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5">
+                                Zone C <span id="badge-correct-C" class="hidden w-2 h-2 rounded-full bg-emerald-500"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                            <div>
+                                <label for="zone-label" class="block text-xs font-semibold text-slate-600 mb-1">Zone Label (kort navn)</label>
+                                <input id="zone-label" type="text" placeholder="F.eks. Træd ud"
+                                    class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+
+                            <!-- Correct Solution Toggle -->
+                            <div class="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2">
+                                <label for="zone-correct" class="flex items-center gap-2.5 cursor-pointer select-none">
+                                    <input id="zone-correct" type="checkbox" class="w-4 h-4 rounded accent-emerald-600 cursor-pointer">
+                                    <span class="text-xs font-bold text-slate-700">Korrekt løsning?</span>
+                                </label>
+                                <span id="zone-correct-pill" class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-600">
+                                    Forkert
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Radius Slider & Manual Coordinates -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                            <div>
+                                <div class="flex items-center justify-between mb-1">
+                                    <label for="zone-radius" class="text-xs font-semibold text-slate-600">Zone Radius (r)</label>
+                                    <span id="zone-radius-val" class="text-xs font-mono-code font-bold text-blue-600">35 px</span>
+                                </div>
+                                <input id="zone-radius" type="range" min="20" max="60" value="35"
+                                    class="w-full accent-blue-600 cursor-pointer">
+                            </div>
+
+                            <div>
+                                <span class="block text-xs font-semibold text-slate-600 mb-1">Zone Position (x, y)</span>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="flex items-center bg-white border border-slate-300 rounded-lg px-2 py-1">
+                                        <span class="text-[11px] font-bold text-slate-400 mr-1.5">X</span>
+                                        <input id="zone-x" type="number" min="0" max="400"
+                                            class="w-full text-xs font-mono-code font-semibold focus:outline-none">
+                                    </div>
+                                    <div class="flex items-center bg-white border border-slate-300 rounded-lg px-2 py-1">
+                                        <span class="text-[11px] font-bold text-slate-400 mr-1.5">Y</span>
+                                        <input id="zone-y" type="number" min="0" max="550"
+                                            class="w-full text-xs font-mono-code font-semibold focus:outline-none">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Feedback Textarea -->
+                        <div>
+                            <label for="zone-feedback" class="block text-xs font-semibold text-slate-600 mb-1">
+                                Feedback tekst (vises når spilleren vælger denne zone)
+                            </label>
+                            <textarea id="zone-feedback" rows="2" placeholder="Forklar hvorfor dette valg er godt eller skidt..."
+                                class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"></textarea>
+                        </div>
+
+                        <!-- Outcome Coordinate Readout + Quick Switch to Edit Outcome -->
+                        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+                            <div class="font-mono-code text-[11px] text-slate-500 flex flex-wrap gap-x-3 gap-y-1">
+                                <span>p1_end: <strong id="ro-p1-end" class="text-slate-700">(200, 480)</strong></span>
+                                <span>d_end: <strong id="ro-d-end" class="text-slate-700">(220, 380)</strong></span>
+                                <span>ball_end: <strong id="ro-ball-end" class="text-slate-700">(320, 300)</strong></span>
+                            </div>
+                            <button id="btn-edit-zone-outcome" type="button"
+                                class="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline">
+                                Redigér slutpositioner på banen →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Eksportér Kode Card -->
+                <div class="bg-slate-900 rounded-2xl shadow-md border border-slate-800 p-5 text-white">
+                    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                        <h2 class="text-sm font-extrabold uppercase tracking-wider text-white flex items-center gap-2">
+                            <span class="w-6 h-6 rounded-lg bg-slate-800 text-emerald-400 flex items-center justify-center text-xs">3</span>
+                            Eksportér Kode
+                        </h2>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+                                <input id="toggle-comma" type="checkbox" checked class="w-4 h-4 rounded accent-emerald-500 cursor-pointer">
+                                <span>Inkludér komma til sidst</span>
+                            </label>
+                            <button id="btn-copy-code" type="button"
+                                class="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 transition-all shadow-lg flex items-center gap-1.5">
+                                <span id="copy-icon">📋</span>
+                                <span id="copy-label">Kopiér kode</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <p class="text-xs text-slate-400 mb-3">
+                        Indsæt denne blok direkte i <code class="text-amber-300 bg-slate-800 px-1.5 py-0.5 rounded">const scenarios = [ ... ]</code> i din HTML-fil.
+                    </p>
+
+                    <div class="bg-slate-950 rounded-xl border border-slate-800 p-3.5 overflow-x-auto code-scroll max-h-80">
+                        <pre class="font-mono-code text-xs leading-relaxed m-0"><code id="code-output"></code></pre>
+                    </div>
+                </div>
+
+            </section>
+        </div>
+    </main>
+
+    <!-- Floating Toast Notification -->
+    <div id="toast" class="hidden fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-slate-700 text-sm font-semibold flex items-center gap-2 animate-toast">
+        <span class="text-emerald-400">✓</span>
+        <span id="toast-msg">Koden er kopieret til udklipsholderen!</span>
+    </div>
+
+<script>
+    // =========================================================================
+    // 1. DEFAULT TEMPLATE & APPLICATION STATE
+    // =========================================================================
+    const CANVAS_W = 400;
+    const CANVAS_H = 550;
+
+    function createDefaultScenario() {
+        return {
+            id: 6,
+            title: "Træd ud af skyggen",
+            desc: "Forsvarsspilleren spærrer den direkte pasning. Hvor skal du løbe hen for at åbne pasningslinjen?",
+            start: {
+                p1: { x: 200, y: 480 },
+                p2: { x: 200, y: 240 },
+                d:  { x: 200, y: 350 }
+            },
+            zones: [
+                {
+                    id: 'A',
+                    label: 'Bliv i skyggen',
+                    x: 200,
+                    y: 150,
+                    r: 35,
+                    correct: false,
+                    feedback: "Du står stadig i forsvarsspillerens skygge! Bolden bliver opsnappet.",
+                    p1_end: { x: 200, y: 480 },
+                    d_end:  { x: 200, y: 350 },
+                    ball_end: { x: 200, y: 350 }
+                },
+                {
+                    id: 'B',
+                    label: 'Tæt på bold',
+                    x: 190,
+                    y: 410,
+                    r: 35,
+                    correct: false,
+                    feedback: "Du kommer for tæt på boldholderen, så én forsvarsspiller kan dække jer begge.",
+                    p1_end: { x: 200, y: 480 },
+                    d_end:  { x: 200, y: 430 },
+                    ball_end: { x: 200, y: 430 }
+                },
+                {
+                    id: 'C',
+                    label: 'Træd ud',
+                    x: 320,
+                    y: 300,
+                    r: 35,
+                    correct: true,
+                    feedback: "Helt perfekt! Du træder ud af pasningsskyggen og skaber en fri pasningslinje.",
+                    p1_end: { x: 200, y: 480 },
+                    d_end:  { x: 230, y: 370 },
+                    ball_end: { x: 320, y: 300 }
+                }
+            ]
+        };
+    }
+
+    let scenario = createDefaultScenario();
+    let activeMode = 'setup'; // 'setup' | 'A' | 'B' | 'C'
+    let activeZoneTab = 'C';  // 'A' | 'B' | 'C'
+    let showShadow = true;
+    let snapToGrid = true;
+    let includeTrailingComma = true;
+
+    // Drag state
+    let dragTarget = null; // { kind: 'p1'|'p2'|'d'|'zone'|'p1_end'|'d_end'|'ball_end', zoneIdx?: number }
+    let resetConfirmPending = false;
+    let resetConfirmTimeout = null;
+
+    // Animation Preview state
+    const P2_ANIM_DURATION = 1000;
+    const OUTCOME_ANIM_DURATION = 1200;
+    let preview = {
+        active: false,
+        zoneId: 'C',
+        phase: 0, // 1 = P2 runs, 2 = P1/D/Ball react, 3 = Finished
+        startTime: 0,
+        p1: { x: 0, y: 0 },
+        p2: { x: 0, y: 0 },
+        d: { x: 0, y: 0 },
+        ball: { x: 0, y: 0 }
+    };
+
+    // =========================================================================
+    // 2. DOM REFERENCES
+    // =========================================================================
+    const canvas = document.getElementById('editorCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const modeTabs = document.querySelectorAll('.mode-tab');
+    const zoneTabs = document.querySelectorAll('.zone-tab');
+    const modeHint = document.getElementById('mode-hint');
+    const coordBadge = document.getElementById('coord-badge');
+    const outcomeActions = document.getElementById('outcome-actions');
+    const outcomeZoneLabel = document.getElementById('outcome-zone-label');
+
+    const toggleShadow = document.getElementById('toggle-shadow');
+    const toggleGrid = document.getElementById('toggle-grid');
+    const toggleComma = document.getElementById('toggle-comma');
+
+    const inputId = document.getElementById('input-id');
+    const inputTitle = document.getElementById('input-title');
+    const inputDesc = document.getElementById('input-desc');
+
+    const zoneLabelInput = document.getElementById('zone-label');
+    const zoneCorrectInput = document.getElementById('zone-correct');
+    const zoneCorrectPill = document.getElementById('zone-correct-pill');
+    const zoneRadiusInput = document.getElementById('zone-radius');
+    const zoneRadiusVal = document.getElementById('zone-radius-val');
+    const zoneXInput = document.getElementById('zone-x');
+    const zoneYInput = document.getElementById('zone-y');
+    const zoneFeedbackInput = document.getElementById('zone-feedback');
+
+    const roP1End = document.getElementById('ro-p1-end');
+    const roDEnd = document.getElementById('ro-d-end');
+    const roBallEnd = document.getElementById('ro-ball-end');
+    const btnEditZoneOutcome = document.getElementById('btn-edit-zone-outcome');
+
+    const previewZoneSelect = document.getElementById('preview-zone-select');
+    const btnPlayPreview = document.getElementById('btn-play-preview');
+    const playIcon = document.getElementById('play-icon');
+    const playLabel = document.getElementById('play-label');
+    const previewStatus = document.getElementById('preview-status');
+    const previewFeedbackOverlay = document.getElementById('preview-feedback-overlay');
+    const previewFbIcon = document.getElementById('preview-fb-icon');
+    const previewFbTitle = document.getElementById('preview-fb-title');
+    const previewFbText = document.getElementById('preview-fb-text');
+    const btnClosePreview = document.getElementById('btn-close-preview');
+
+    const codeOutput = document.getElementById('code-output');
+    const btnCopyCode = document.getElementById('btn-copy-code');
+    const copyLabel = document.getElementById('copy-label');
+    const btnReset = document.getElementById('btn-reset');
+    const btnResetText = document.getElementById('btn-reset-text');
+    const toast = document.getElementById('toast');
+    const toastMsg = document.getElementById('toast-msg');
+
+    // =========================================================================
+    // 3. MATH & UTILITY HELPERS
+    // =========================================================================
+    function clamp(val, min, max) {
+        return Math.max(min, Math.min(max, val));
+    }
+
+    function snapCoord(val, maxVal) {
+        let v = clamp(Math.round(val), 0, maxVal);
+        if (snapToGrid) {
+            v = clamp(Math.round(v / 10) * 10, 0, maxVal);
+        }
+        return v;
+    }
+
+    function dist(a, b) {
+        return Math.hypot(b.x - a.x, b.y - a.y);
+    }
+
+    function lerp(a, b, t) {
+        return a + (b - a) * t;
+    }
+
+    function easeOutCubic(t) {
+        return 1 - Math.pow(1 - t, 3);
+    }
+
+    function getZoneById(id) {
+        return scenario.zones.find(z => z.id === id);
+    }
+
+    function escapeJsString(str, quoteChar = '"') {
+        if (str == null) return '';
+        let escaped = String(str)
+            .replace(/\\/g, '\\\\')
+            .replace(/\r\n|\r|\n/g, '\\n');
+        if (quoteChar === '"') {
+            escaped = escaped.replace(/"/g, '\\"');
+        } else {
+            escaped = escaped.replace(/'/g, "\\'");
+        }
+        return escaped;
+    }
+
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    let toastTimeout = null;
+    function showToast(message) {
+        toastMsg.textContent = message;
+        toast.classList.remove('hidden');
+        clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => {
+            toast.classList.add('hidden');
+        }, 2500);
+    }
+
+    // =========================================================================
+    // 4. CODE GENERATOR (EXACT TARGET SCHEMA)
+    // =========================================================================
+    function buildRawCode() {
+        const idNum = Number.isFinite(parseInt(scenario.id, 10)) ? parseInt(scenario.id, 10) : 6;
+        const s = scenario.start;
+        const comma = includeTrailingComma ? ',' : '';
+
+        const zoneBlocks = scenario.zones.map(z => {
+            const labelEsc = escapeJsString(z.label, "'");
+            const fbEsc = escapeJsString(z.feedback, '"');
+            return [
+                `        {`,
+                `            id: '${z.id}', label: '${labelEsc}', x: ${Math.round(z.x)}, y: ${Math.round(z.y)}, r: ${Math.round(z.r)}, correct: ${Boolean(z.correct)},`,
+                `            feedback: "${fbEsc}",`,
+                `            p1_end: {x: ${Math.round(z.p1_end.x)}, y: ${Math.round(z.p1_end.y)}}, d_end: {x: ${Math.round(z.d_end.x)}, y: ${Math.round(z.d_end.y)}}, ball_end: {x: ${Math.round(z.ball_end.x)}, y: ${Math.round(z.ball_end.y)}}`,
+                `        }`
+            ].join('\n');
+        }).join(',\n');
+
+        return [
+            `{`,
+            `    id: ${idNum},`,
+            `    title: "${escapeJsString(scenario.title, '"')}",`,
+            `    desc: "${escapeJsString(scenario.desc, '"')}",`,
+            `    start: { p1: {x: ${Math.round(s.p1.x)}, y: ${Math.round(s.p1.y)}}, p2: {x: ${Math.round(s.p2.x)}, y: ${Math.round(s.p2.y)}}, d: {x: ${Math.round(s.d.x)}, y: ${Math.round(s.d.y)}} },`,
+            `    zones: [`,
+            zoneBlocks,
+            `    ]`,
+            `}${comma}`
+        ].join('\n');
+    }
+
+    function highlightCode(raw) {
+        // Lightweight safe syntax highlighter for our known JS object schema
+        const escaped = escapeHtml(raw);
+        return escaped.replace(
+            /(&quot;(?:\\.|[^&])*?&quot;|'(?:\\.|[^'])*?'|\b(?:id|title|desc|start|zones|p1|p2|d|label|x|y|r|correct|feedback|p1_end|d_end|ball_end)(?=:)|\b(?:true|false)\b|\b\d+\b)/g,
+            (match) => {
+                if (match.startsWith('&quot;') || match.startsWith("'")) {
+                    return `<span class="tok-str">${match}</span>`;
+                }
+                if (match === 'true' || match === 'false') {
+                    return `<span class="tok-bool">${match}</span>`;
+                }
+                if (/^\d+$/.test(match)) {
+                    return `<span class="tok-num">${match}</span>`;
+                }
+                return `<span class="tok-key">${match}</span>`;
+            }
+        );
+    }
+
+    function updateCodeOutput() {
+        const raw = buildRawCode();
+        codeOutput.innerHTML = highlightCode(raw);
+    }
+
+    // =========================================================================
+    // 5. CANVAS DRAWING (MATCHES ORIGINAL 400x550 GAME)
+    // =========================================================================
+    function drawField() {
+        // Alternating 40px horizontal grass stripes
+        for (let i = 0; i < CANVAS_H; i += 40) {
+            ctx.fillStyle = (i / 40) % 2 === 0 ? '#4ade80' : '#22c55e';
+            ctx.fillRect(0, i, CANVAS_W, 40);
+        }
+
+        // Subtle 10px helper grid when snap-to-grid is enabled
+        if (snapToGrid && !preview.active) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let x = 20; x < CANVAS_W; x += 20) {
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, CANVAS_H);
+            }
+            for (let y = 20; y < CANVAS_H; y += 20) {
+                ctx.moveTo(0, y);
+                ctx.lineTo(CANVAS_W, y);
+            }
+            ctx.stroke();
+        }
+
+        // White penalty box & 6-yard box
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.rect(80, -5, 240, 120);
+        ctx.rect(130, -5, 140, 40);
+        ctx.stroke();
+
+        // Goal & net
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(150, 0, 100, 15);
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 150; i <= 250; i += 10) {
+            ctx.moveTo(i, 0);
+            ctx.lineTo(i, 15);
+        }
+        for (let i = 0; i <= 15; i += 5) {
+            ctx.moveTo(150, i);
+            ctx.lineTo(250, i);
+        }
+        ctx.stroke();
+    }
+
+    function drawPassingShadow(p1, d) {
+        const dx = d.x - p1.x;
+        const dy = d.y - p1.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance < 18) return;
+
+        // Effective blocking radius of the defender
+        const blockRadius = 22;
+        const baseAngle = Math.atan2(dy, dx);
+        const halfAngle = Math.asin(Math.min(0.95, blockRadius / distance));
+
+        const angleLeft = baseAngle - halfAngle;
+        const angleRight = baseAngle + halfAngle;
+
+        // Tangent contact points near defender
+        const tanDist = Math.sqrt(Math.max(0, distance * distance - blockRadius * blockRadius));
+        const t1x = p1.x + Math.cos(angleLeft) * tanDist;
+        const t1y = p1.y + Math.sin(angleLeft) * tanDist;
+        const t2x = p1.x + Math.cos(angleRight) * tanDist;
+        const t2y = p1.y + Math.sin(angleRight) * tanDist;
+
+        // Extend rays well beyond canvas bounds
+        const rayLen = 900;
+        const e1x = p1.x + Math.cos(angleLeft) * rayLen;
+        const e1y = p1.y + Math.sin(angleLeft) * rayLen;
+        const e2x = p1.x + Math.cos(angleRight) * rayLen;
+        const e2y = p1.y + Math.sin(angleRight) * rayLen;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(t1x, t1y);
+        ctx.lineTo(e1x, e1y);
+        ctx.lineTo(e2x, e2y);
+        ctx.lineTo(t2x, t2y);
+        ctx.closePath();
+
+        const grad = ctx.createLinearGradient(d.x, d.y, d.x + (dx / distance) * 350, d.y + (dy / distance) * 350);
+        grad.addColorStop(0, 'rgba(15, 23, 42, 0.42)');
+        grad.addColorStop(1, 'rgba(15, 23, 42, 0.16)');
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Subtle dashed edge lines
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.35)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(t1x, t1y);
+        ctx.lineTo(e1x, e1y);
+        ctx.moveTo(t2x, t2y);
+        ctx.lineTo(e2x, e2y);
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    function drawArrow(from, to, color, dashed = true) {
+        if (dist(from, to) < 6) return;
+        const angle = Math.atan2(to.y - from.y, to.x - from.x);
+        const headLen = 10;
+
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 2.5;
+        if (dashed) ctx.setLineDash([6, 5]);
+
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(to.x, to.y);
+        ctx.stroke();
+
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(to.x, to.y);
+        ctx.lineTo(to.x - headLen * Math.cos(angle - Math.PI / 6), to.y - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(to.x - headLen * Math.cos(angle + Math.PI / 6), to.y - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    function drawPlayer(x, y, color, text, size = 14, alpha = 1) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+
+        // Ground shadow
+        ctx.beginPath();
+        ctx.arc(x, y + 4, size, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fill();
+
+        // Player body
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Label
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, x, y + 1);
+
+        ctx.restore();
+    }
+
+    function drawBall(x, y, highlightGrab = false) {
+        ctx.save();
+
+        if (highlightGrab) {
+            ctx.beginPath();
+            ctx.arc(x, y, 14, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([3, 3]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        ctx.beginPath();
+        ctx.arc(x + 2, y + 2, 6, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x - 3, y - 2, 1.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + 3, y + 2, 1.5, 0, Math.PI * 2); ctx.fill();
+
+        ctx.restore();
+    }
+
+    function drawZone(zone, isSelected, isDimmed) {
+        ctx.save();
+        ctx.globalAlpha = isDimmed ? 0.35 : 1;
+
+        // Highlight ring for selected zone
+        if (isSelected) {
+            ctx.beginPath();
+            ctx.arc(zone.x, zone.y, zone.r + 5, 0, Math.PI * 2);
+            ctx.strokeStyle = zone.correct ? 'rgba(16, 185, 129, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+        }
+
+        // Yellow dashed circle (matching game)
+        ctx.beginPath();
+        ctx.arc(zone.x, zone.y, zone.r, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(253, 224, 71, 0.95)';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 6]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Semi-transparent fill
+        ctx.beginPath();
+        ctx.arc(zone.x, zone.y, zone.r, 0, Math.PI * 2);
+        ctx.fillStyle = zone.correct ? 'rgba(34, 197, 94, 0.25)' : 'rgba(253, 224, 71, 0.22)';
+        ctx.fill();
+
+        // Centered white badge with zone ID
+        ctx.font = 'bold 14px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const textWidth = ctx.measureText(zone.id).width;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillRect(zone.x - textWidth / 2 - 5, zone.y - 10, textWidth + 10, 20);
+
+        ctx.fillStyle = '#0f172a';
+        ctx.fillText(zone.id, zone.x, zone.y + 1);
+
+        // Small green checkmark pill on top of zone if correct
+        if (zone.correct) {
+            ctx.beginPath();
+            ctx.arc(zone.x + zone.r * 0.7, zone.y - zone.r * 0.7, 8, 0, Math.PI * 2);
+            ctx.fillStyle = '#10b981';
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 10px Inter, sans-serif';
+            ctx.fillText('✓', zone.x + zone.r * 0.7, zone.y - zone.r * 0.7 + 0.5);
+        }
+
+        ctx.restore();
+    }
+
+    function renderCanvas(timestamp) {
+        ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+        drawField();
+
+        // --- MODE A: LIVE ANIMATION PREVIEW ---
+        if (preview.active) {
+            const z = getZoneById(preview.zoneId);
+            const s = scenario.start;
+
+            if (showShadow) {
+                drawPassingShadow(preview.p1, preview.d);
+            }
+
+            // Show target zone subtly during preview
+            drawZone(z, true, false);
+
+            // Advance animation phases
+            if (preview.phase === 1) {
+                const t = Math.min((timestamp - preview.startTime) / P2_ANIM_DURATION, 1);
+                const e = easeOutCubic(t);
+                preview.p2.x = lerp(s.p2.x, z.x, e);
+                preview.p2.y = lerp(s.p2.y, z.y, e);
+                if (t >= 1) {
+                    preview.phase = 2;
+                    preview.startTime = timestamp;
+                    previewStatus.textContent = 'Fase 2: Pasning & reaktion...';
+                }
+            } else if (preview.phase === 2) {
+                const t = Math.min((timestamp - preview.startTime) / OUTCOME_ANIM_DURATION, 1);
+                const e = easeOutCubic(t);
+                preview.p1.x = lerp(s.p1.x, z.p1_end.x, e);
+                preview.p1.y = lerp(s.p1.y, z.p1_end.y, e);
+                preview.d.x = lerp(s.d.x, z.d_end.x, e);
+                preview.d.y = lerp(s.d.y, z.d_end.y, e);
+                preview.ball.x = lerp(s.p1.x + 10, z.ball_end.x, e);
+                preview.ball.y = lerp(s.p1.y - 10, z.ball_end.y, e);
+
+                if (t >= 1) {
+                    preview.phase = 3;
+                    previewStatus.classList.add('hidden');
+                    showPreviewFeedback(z);
+                }
+            }
+
+            drawPlayer(preview.d.x, preview.d.y, '#ef4444', 'F');
+            drawPlayer(preview.p1.x, preview.p1.y, '#2563eb', '1');
+            drawPlayer(preview.p2.x, preview.p2.y, '#3b82f6', '2');
+            drawBall(preview.ball.x, preview.ball.y);
+
+            if (preview.phase < 3) {
+                requestAnimationFrame(renderCanvas);
+            }
+            return;
+        }
+
+        // --- MODE B: SETUP MODE ---
+        if (activeMode === 'setup') {
+            const s = scenario.start;
+
+            if (showShadow) {
+                drawPassingShadow(s.p1, s.d);
+            }
+
+            // Draw all 3 zones (highlight the one open in right panel)
+            scenario.zones.forEach(z => {
+                drawZone(z, z.id === activeZoneTab, false);
+            });
+
+            // Highlight ring around P2 (the player controlled by user)
+            ctx.beginPath();
+            ctx.arc(s.p2.x, s.p2.y, 20, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+            ctx.fill();
+
+            drawPlayer(s.d.x, s.d.y, '#ef4444', 'F');
+            drawPlayer(s.p1.x, s.p1.y, '#2563eb', '1');
+            drawPlayer(s.p2.x, s.p2.y, '#3b82f6', '2');
+            drawBall(s.p1.x + 10, s.p1.y - 10);
+            return;
+        }
+
+        // --- MODE C: OUTCOME MODE (A, B, or C) ---
+        const z = getZoneById(activeMode);
+        const s = scenario.start;
+
+        if (showShadow) {
+            drawPassingShadow(s.p1, s.d);
+        }
+
+        // Draw zones (dim non-active ones)
+        scenario.zones.forEach(zone => {
+            drawZone(zone, zone.id === z.id, zone.id !== z.id);
+        });
+
+        // Ghosted start positions
+        drawPlayer(s.d.x, s.d.y, '#ef4444', 'F', 14, 0.32);
+        drawPlayer(s.p1.x, s.p1.y, '#2563eb', '1', 14, 0.32);
+        drawPlayer(s.p2.x, s.p2.y, '#3b82f6', '2', 14, 0.32);
+
+        // Dashed arrows from Start -> End
+        drawArrow(s.p2, { x: z.x, y: z.y }, 'rgba(59, 130, 246, 0.9)', true);
+        drawArrow(s.p1, z.p1_end, 'rgba(37, 99, 235, 0.9)', true);
+        drawArrow(s.d, z.d_end, 'rgba(239, 68, 68, 0.9)', true);
+        drawArrow({ x: s.p1.x + 10, y: s.p1.y - 10 }, z.ball_end, 'rgba(255, 255, 255, 0.95)', true);
+
+        // P2 at target zone
+        drawPlayer(z.x, z.y, '#3b82f6', '2');
+
+        // Draggable end positions
+        drawPlayer(z.d_end.x, z.d_end.y, '#ef4444', 'F');
+        drawPlayer(z.p1_end.x, z.p1_end.y, '#2563eb', '1');
+        drawBall(z.ball_end.x, z.ball_end.y, true);
+    }
+
+    // =========================================================================
+    // 6. CANVAS DRAG & DROP INTERACTION (MOUSE + TOUCH)
+    // =========================================================================
+    function getCanvasPos(event) {
+        const rect = canvas.getBoundingClientRect();
+        let clientX = event.clientX;
+        let clientY = event.clientY;
+        if (event.touches && event.touches.length > 0) {
+            clientX = event.touches[0].clientX;
+            clientY = event.touches[0].clientY;
+        }
+        return {
+            x: ((clientX - rect.left) / rect.width) * CANVAS_W,
+            y: ((clientY - rect.top) / rect.height) * CANVAS_H
+        };
+    }
+
+    function handlePointerDown(event) {
+        if (preview.active) return;
+
+        const pos = getCanvasPos(event);
+
+        if (activeMode === 'setup') {
+            const s = scenario.start;
+            // Prioritize players first (smaller targets)
+            if (dist(pos, s.p2) <= 22) {
+                dragTarget = { kind: 'p2' };
+            } else if (dist(pos, s.p1) <= 22) {
+                dragTarget = { kind: 'p1' };
+            } else if (dist(pos, s.d) <= 22) {
+                dragTarget = { kind: 'd' };
+            } else {
+                // Check zones
+                for (let i = 0; i < scenario.zones.length; i++) {
+                    const z = scenario.zones[i];
+                    if (dist(pos, z) <= Math.max(z.r, 24)) {
+                        dragTarget = { kind: 'zone', zoneIdx: i };
+                        setActiveZoneTab(z.id);
+                        break;
+                    }
+                }
+            }
+        } else {
+            // Outcome mode: ball_end, p1_end, d_end are draggable
+            const z = getZoneById(activeMode);
+            if (dist(pos, z.ball_end) <= 20) {
+                dragTarget = { kind: 'ball_end' };
+            } else if (dist(pos, z.p1_end) <= 22) {
+                dragTarget = { kind: 'p1_end' };
+            } else if (dist(pos, z.d_end) <= 22) {
+                dragTarget = { kind: 'd_end' };
+            }
+        }
+
+        if (dragTarget) {
+            canvas.classList.add('dragging');
+            updateCoordBadge(pos.x, pos.y);
+            renderCanvas();
+        }
+    }
+
+    function handlePointerMove(event) {
+        if (!dragTarget || preview.active) return;
+        if (event.cancelable) event.preventDefault();
+
+        const raw = getCanvasPos(event);
+        const x = snapCoord(raw.x, CANVAS_W);
+        const y = snapCoord(raw.y, CANVAS_H);
+
+        if (activeMode === 'setup') {
+            if (dragTarget.kind === 'p1') {
+                scenario.start.p1.x = x;
+                scenario.start.p1.y = y;
+            } else if (dragTarget.kind === 'p2') {
+                scenario.start.p2.x = x;
+                scenario.start.p2.y = y;
+            } else if (dragTarget.kind === 'd') {
+                scenario.start.d.x = x;
+                scenario.start.d.y = y;
+            } else if (dragTarget.kind === 'zone') {
+                const z = scenario.zones[dragTarget.zoneIdx];
+                z.x = x;
+                z.y = y;
+                zoneXInput.value = x;
+                zoneYInput.value = y;
+            }
+        } else {
+            const z = getZoneById(activeMode);
+            if (dragTarget.kind === 'ball_end') {
+                z.ball_end.x = x;
+                z.ball_end.y = y;
+            } else if (dragTarget.kind === 'p1_end') {
+                z.p1_end.x = x;
+                z.p1_end.y = y;
+            } else if (dragTarget.kind === 'd_end') {
+                z.d_end.x = x;
+                z.d_end.y = y;
+            }
+            updateOutcomeReadout();
+        }
+
+        updateCoordBadge(x, y);
+        renderCanvas();
+        updateCodeOutput();
+    }
+
+    function handlePointerUp() {
+        if (!dragTarget) return;
+        dragTarget = null;
+        canvas.classList.remove('dragging');
+        coordBadge.classList.add('hidden');
+    }
+
+    function updateCoordBadge(x, y) {
+        coordBadge.textContent = `x: ${Math.round(x)}, y: ${Math.round(y)}`;
+        coordBadge.classList.remove('hidden');
+    }
+
+    canvas.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('mouseup', handlePointerUp);
+
+    canvas.addEventListener('touchstart', (e) => {
+        if (e.cancelable) e.preventDefault();
+        handlePointerDown(e);
+    }, { passive: false });
+    window.addEventListener('touchmove', handlePointerMove, { passive: false });
+    window.addEventListener('touchend', handlePointerUp);
+
+    // =========================================================================
+    // 7. LIVE ANIMATION PREVIEW CONTROLS
+    // =========================================================================
+    function startPreview() {
+        const zoneId = previewZoneSelect.value;
+        const s = scenario.start;
+
+        preview.active = true;
+        preview.zoneId = zoneId;
+        preview.phase = 1;
+        preview.startTime = performance.now();
+        preview.p1 = { ...s.p1 };
+        preview.p2 = { ...s.p2 };
+        preview.d = { ...s.d };
+        preview.ball = { x: s.p1.x + 10, y: s.p1.y - 10 };
+
+        previewFeedbackOverlay.classList.add('hidden');
+        previewStatus.textContent = `Fase 1: Spiller 2 løber til Zone ${zoneId}...`;
+        previewStatus.classList.remove('hidden');
+        playIcon.textContent = '■';
+        playLabel.textContent = 'Stop animation';
+        btnPlayPreview.classList.replace('bg-blue-600', 'bg-rose-600');
+        btnPlayPreview.classList.replace('hover:bg-blue-500', 'hover:bg-rose-500');
+
+        requestAnimationFrame(renderCanvas);
+    }
+
+    function stopPreview() {
+        preview.active = false;
+        preview.phase = 0;
+        previewStatus.classList.add('hidden');
+        previewFeedbackOverlay.classList.add('hidden');
+        playIcon.textContent = '▶';
+        playLabel.textContent = 'Afspil test-animation';
+        btnPlayPreview.classList.replace('bg-rose-600', 'bg-blue-600');
+        btnPlayPreview.classList.replace('hover:bg-rose-500', 'hover:bg-blue-500');
+        renderCanvas();
+    }
+
+    function showPreviewFeedback(zone) {
+        if (zone.correct) {
+            previewFbIcon.textContent = '⚽️👏';
+            previewFbTitle.textContent = `Zone ${zone.id} (${zone.label}) — Fremragende løb!`;
+            previewFbTitle.className = 'text-sm font-extrabold text-emerald-700 truncate';
+        } else {
+            previewFbIcon.textContent = '❌';
+            previewFbTitle.textContent = `Zone ${zone.id} (${zone.label}) — Prøv igen!`;
+            previewFbTitle.className = 'text-sm font-extrabold text-rose-700 truncate';
+        }
+        previewFbText.textContent = zone.feedback || '(Ingen feedback-tekst angivet)';
+        previewFeedbackOverlay.classList.remove('hidden');
+    }
+
+    btnPlayPreview.addEventListener('click', () => {
+        if (preview.active) {
+            stopPreview();
+        } else {
+            startPreview();
+        }
+    });
+
+    btnClosePreview.addEventListener('click', stopPreview);
+
+    // =========================================================================
+    // 8. UI SYNC & FORM EVENT HANDLERS
+    // =========================================================================
+    function setActiveMode(mode) {
+        if (preview.active) stopPreview();
+        activeMode = mode;
+
+        modeTabs.forEach(btn => {
+            const isMatch = btn.dataset.mode === mode;
+            if (isMatch) {
+                btn.classList.add('bg-white', 'text-slate-900', 'shadow-sm');
+                btn.classList.remove('text-slate-500', 'hover:text-slate-800');
+            } else {
+                btn.classList.remove('bg-white', 'text-slate-900', 'shadow-sm');
+                btn.classList.add('text-slate-500', 'hover:text-slate-800');
+            }
+        });
+
+        if (mode === 'setup') {
+            modeHint.textContent = 'Træk spillere (1, 2, F) & zoner';
+            outcomeActions.classList.add('hidden');
+        } else {
+            modeHint.textContent = `Træk slutpositioner for Zone ${mode}`;
+            outcomeZoneLabel.textContent = mode;
+            outcomeActions.classList.remove('hidden');
+            setActiveZoneTab(mode);
+            previewZoneSelect.value = mode;
+        }
+
+        renderCanvas();
+    }
+
+    function setActiveZoneTab(zoneId) {
+        activeZoneTab = zoneId;
+        zoneTabs.forEach(btn => {
+            const isMatch = btn.dataset.zoneTab === zoneId;
+            if (isMatch) {
+                btn.classList.add('bg-white', 'text-slate-900', 'shadow-sm');
+                btn.classList.remove('text-slate-500', 'hover:text-slate-800');
+            } else {
+                btn.classList.remove('bg-white', 'text-slate-900', 'shadow-sm');
+                btn.classList.add('text-slate-500', 'hover:text-slate-800');
+            }
+        });
+        populateZoneForm();
+        renderCanvas();
+    }
+
+    function updateCorrectBadges() {
+        scenario.zones.forEach(z => {
+            const dot = document.getElementById(`badge-correct-${z.id}`);
+            if (dot) {
+                dot.classList.toggle('hidden', !z.correct);
+            }
+        });
+    }
+
+    function updateOutcomeReadout() {
+        const z = getZoneById(activeZoneTab);
+        roP1End.textContent = `(${Math.round(z.p1_end.x)}, ${Math.round(z.p1_end.y)})`;
+        roDEnd.textContent = `(${Math.round(z.d_end.x)}, ${Math.round(z.d_end.y)})`;
+        roBallEnd.textContent = `(${Math.round(z.ball_end.x)}, ${Math.round(z.ball_end.y)})`;
+    }
+
+    function populateScenarioForm() {
+        inputId.value = scenario.id;
+        inputTitle.value = scenario.title;
+        inputDesc.value = scenario.desc;
+        updateCorrectBadges();
+        populateZoneForm();
+    }
+
+    function populateZoneForm() {
+        const z = getZoneById(activeZoneTab);
+        zoneLabelInput.value = z.label;
+        zoneCorrectInput.checked = z.correct;
+        zoneCorrectPill.textContent = z.correct ? 'Korrekt ✓' : 'Forkert';
+        zoneCorrectPill.className = z.correct
+            ? 'text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700'
+            : 'text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-600';
+
+        zoneRadiusInput.value = z.r;
+        zoneRadiusVal.textContent = `${z.r} px`;
+        zoneXInput.value = Math.round(z.x);
+        zoneYInput.value = Math.round(z.y);
+        zoneFeedbackInput.value = z.feedback;
+        updateOutcomeReadout();
+    }
+
+    // Mode tab clicks
+    modeTabs.forEach(btn => {
+        btn.addEventListener('click', () => setActiveMode(btn.dataset.mode));
+    });
+
+    // Zone tab clicks
+    zoneTabs.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const zId = btn.dataset.zoneTab;
+            setActiveZoneTab(zId);
+            if (activeMode !== 'setup') {
+                setActiveMode(zId);
+            }
+        });
+    });
+
+    btnEditZoneOutcome.addEventListener('click', () => {
+        setActiveMode(activeZoneTab);
+    });
+
+    // Helper toggles
+    toggleShadow.addEventListener('change', () => {
+        showShadow = toggleShadow.checked;
+        renderCanvas();
+    });
+
+    toggleGrid.addEventListener('change', () => {
+        snapToGrid = toggleGrid.checked;
+        renderCanvas();
+    });
+
+    toggleComma.addEventListener('change', () => {
+        includeTrailingComma = toggleComma.checked;
+        updateCodeOutput();
+    });
+
+    // Scenario Info inputs
+    inputId.addEventListener('input', () => {
+        scenario.id = parseInt(inputId.value, 10) || 1;
+        updateCodeOutput();
+    });
+    inputTitle.addEventListener('input', () => {
+        scenario.title = inputTitle.value;
+        updateCodeOutput();
+    });
+    inputDesc.addEventListener('input', () => {
+        scenario.desc = inputDesc.value;
+        updateCodeOutput();
+    });
+
+    // Zone property inputs
+    zoneLabelInput.addEventListener('input', () => {
+        getZoneById(activeZoneTab).label = zoneLabelInput.value;
+        updateCodeOutput();
+    });
+
+    zoneCorrectInput.addEventListener('change', () => {
+        const z = getZoneById(activeZoneTab);
+        z.correct = zoneCorrectInput.checked;
+        populateZoneForm();
+        updateCorrectBadges();
+        renderCanvas();
+        updateCodeOutput();
+    });
+
+    zoneRadiusInput.addEventListener('input', () => {
+        const val = parseInt(zoneRadiusInput.value, 10);
+        getZoneById(activeZoneTab).r = val;
+        zoneRadiusVal.textContent = `${val} px`;
+        renderCanvas();
+        updateCodeOutput();
+    });
+
+    zoneXInput.addEventListener('input', () => {
+        const val = clamp(parseInt(zoneXInput.value, 10) || 0, 0, CANVAS_W);
+        getZoneById(activeZoneTab).x = val;
+        renderCanvas();
+        updateCodeOutput();
+    });
+
+    zoneYInput.addEventListener('input', () => {
+        const val = clamp(parseInt(zoneYInput.value, 10) || 0, 0, CANVAS_H);
+        getZoneById(activeZoneTab).y = val;
+        renderCanvas();
+        updateCodeOutput();
+    });
+
+    zoneFeedbackInput.addEventListener('input', () => {
+        getZoneById(activeZoneTab).feedback = zoneFeedbackInput.value;
+        updateCodeOutput();
+    });
+
+    // Outcome Quick Actions
+    document.getElementById('btn-ball-to-zone').addEventListener('click', () => {
+        if (activeMode === 'setup') return;
+        const z = getZoneById(activeMode);
+        z.ball_end.x = Math.round(z.x);
+        z.ball_end.y = Math.round(z.y);
+        updateOutcomeReadout();
+        renderCanvas();
+        updateCodeOutput();
+        showToast(`Bold flyttet til Zone ${z.id}`);
+    });
+
+    document.getElementById('btn-ball-to-def').addEventListener('click', () => {
+        if (activeMode === 'setup') return;
+        const z = getZoneById(activeMode);
+        z.ball_end.x = Math.round(z.d_end.x);
+        z.ball_end.y = Math.round(z.d_end.y);
+        updateOutcomeReadout();
+        renderCanvas();
+        updateCodeOutput();
+        showToast('Bold flyttet til forsvarsspiller (opsnappet)');
+    });
+
+    document.getElementById('btn-reset-outcome').addEventListener('click', () => {
+        if (activeMode === 'setup') return;
+        const z = getZoneById(activeMode);
+        z.p1_end.x = Math.round(scenario.start.p1.x);
+        z.p1_end.y = Math.round(scenario.start.p1.y);
+        z.d_end.x = Math.round(scenario.start.d.x);
+        z.d_end.y = Math.round(scenario.start.d.y);
+        updateOutcomeReadout();
+        renderCanvas();
+        updateCodeOutput();
+        showToast('Slutpositioner nulstillet til start');
+    });
+
+    // Copy Code Button (iframe-safe document.execCommand('copy'))
+    btnCopyCode.addEventListener('click', () => {
+        const raw = buildRawCode();
+        const tempArea = document.createElement('textarea');
+        tempArea.value = raw;
+        tempArea.style.position = 'fixed';
+        tempArea.style.opacity = '0';
+        document.body.appendChild(tempArea);
+        tempArea.focus();
+        tempArea.select();
+
+        let copied = false;
+        try {
+            copied = document.execCommand('copy');
+        } catch (err) {
+            copied = false;
+        }
+        document.body.removeChild(tempArea);
+
+        if (copied) {
+            copyLabel.textContent = 'Kopieret!';
+            btnCopyCode.classList.replace('bg-emerald-500', 'bg-blue-500');
+            btnCopyCode.classList.replace('hover:bg-emerald-400', 'hover:bg-blue-400');
+            showToast('Scenarie-koden er kopieret!');
+            setTimeout(() => {
+                copyLabel.textContent = 'Kopiér kode';
+                btnCopyCode.classList.replace('bg-blue-500', 'bg-emerald-500');
+                btnCopyCode.classList.replace('hover:bg-blue-400', 'hover:bg-emerald-400');
+            }, 1800);
+        } else {
+            showToast('Kunne ikke kopiere automatisk — markér koden manuelt.');
+        }
+    });
+
+    // Two-step Reset Button (no native confirm())
+    btnReset.addEventListener('click', () => {
+        if (!resetConfirmPending) {
+            resetConfirmPending = true;
+            btnResetText.textContent = 'Klik igen for at nulstille';
+            btnReset.classList.replace('bg-slate-800', 'bg-rose-700');
+            btnReset.classList.replace('hover:bg-slate-700', 'hover:bg-rose-600');
+            resetConfirmTimeout = setTimeout(() => {
+                resetConfirmPending = false;
+                btnResetText.textContent = 'Nulstil / Ny skabelon';
+                btnReset.classList.replace('bg-rose-700', 'bg-slate-800');
+                btnReset.classList.replace('hover:bg-rose-600', 'hover:bg-slate-700');
+            }, 3500);
+            return;
+        }
+
+        clearTimeout(resetConfirmTimeout);
+        resetConfirmPending = false;
+        btnResetText.textContent = 'Nulstil / Ny skabelon';
+        btnReset.classList.replace('bg-rose-700', 'bg-slate-800');
+        btnReset.classList.replace('hover:bg-rose-600', 'hover:bg-slate-700');
+
+        if (preview.active) stopPreview();
+        scenario = createDefaultScenario();
+        populateScenarioForm();
+        setActiveMode('setup');
+        setActiveZoneTab('C');
+        updateCodeOutput();
+        showToast('Nulstillet til ny skabelon');
+    });
+
+    // =========================================================================
+    // 9. INITIALIZATION
+    // =========================================================================
+    window.addEventListener('load', () => {
+        populateScenarioForm();
+        setActiveMode('setup');
+        setActiveZoneTab('C');
+        updateCodeOutput();
+        renderCanvas();
+    });
+</script>
+</body>
+</html>
