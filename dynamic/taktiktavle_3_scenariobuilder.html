@@ -1,0 +1,1879 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Taktiktavle: Scenarie-Bygger</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+            color: #0f172a;
+            touch-action: manipulation;
+        }
+
+        /* Pitch Canvas Container */
+        .pitch-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            aspect-ratio: 400 / 550;
+            margin: 0 auto;
+            border-radius: 1rem;
+            overflow: hidden;
+            box-shadow: 0 12px 30px -8px rgba(15, 23, 42, 0.25);
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .pitch-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background-color: #4ade80;
+            touch-action: none;
+        }
+
+        /* Test Mode Overlays (matching 3-Trins Raketten) */
+        .sim-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 1.5rem;
+            text-align: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+            z-index: 20;
+        }
+        .sim-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .sim-banner {
+            position: absolute;
+            top: 10px;
+            left: 5%;
+            width: 90%;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.25s;
+            text-align: center;
+            z-index: 10;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            border: 1px solid #334155;
+        }
+        .sim-banner.active {
+            opacity: 1;
+        }
+
+        .sim-decision-panel {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
+            padding: 3.5rem 1.25rem 1.25rem 1.25rem;
+            display: flex;
+            gap: 0.75rem;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+            z-index: 10;
+        }
+        .sim-decision-panel.active {
+            transform: translateY(0);
+        }
+
+        .sim-btn {
+            color: white;
+            font-weight: 700;
+            padding: 0.85rem 1rem;
+            border-radius: 9999px;
+            border: 3px solid white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.25);
+            transition: transform 0.1s;
+            cursor: pointer;
+            width: 100%;
+            font-size: 0.98rem;
+        }
+        .sim-btn:active { transform: scale(0.96); }
+        .sim-btn-primary { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .sim-btn-action { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        .sim-btn-dribble { background: linear-gradient(135deg, #10b981, #059669); }
+
+        .sim-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #e2e8f0;
+            opacity: 0.45;
+            transition: all 0.2s;
+        }
+        .sim-dot.filled { opacity: 1; background: #3b82f6; }
+        .sim-dot.current { opacity: 1; background: #fde047; box-shadow: 0 0 8px #fde047; }
+
+        /* Toast notification */
+        #toast {
+            transform: translateY(120%);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
+            opacity: 0;
+        }
+        #toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        /* Custom subtle scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Top Navigation Header -->
+    <header class="bg-slate-900 text-white shadow-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-blue-600 flex items-center justify-center text-xl shadow-inner">
+                    ⚽
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-extrabold tracking-tight leading-tight">
+                        Taktiktavle: Scenarie-Bygger
+                    </h1>
+                    <p class="text-xs text-slate-400 font-medium">
+                        Byg &amp; eksportér scenarier til 3-Trins Raketten
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+                <button id="btn-open-import" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold border border-slate-700 transition flex items-center gap-1.5 cursor-pointer">
+                    <span>📥</span> Indlæs / Importér
+                </button>
+                <button id="btn-open-test" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+                    <span>▶️</span> Test hele scenariet
+                </button>
+                <button id="btn-open-export" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+                    <span>📋</span> Eksportér kode
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Two-Column Workspace -->
+    <main class="max-w-7xl w-full mx-auto px-4 py-6 flex-1 grid grid-cols-1 lg:grid-cols-[430px_1fr] gap-6 items-start">
+
+        <!-- LEFT COLUMN: Interactive Pitch Canvas -->
+        <section class="lg:sticky lg:top-20 flex flex-col items-center gap-3">
+            <div class="w-full max-w-[400px] bg-white rounded-2xl p-3 shadow-sm border border-slate-200">
+                <!-- Canvas Header Bar -->
+                <div class="flex items-center justify-between mb-2.5 px-1">
+                    <div class="flex items-center gap-2">
+                        <span id="canvas-mode-badge" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
+                            Start-positioner
+                        </span>
+                    </div>
+                    <label class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer select-none">
+                        <input id="chk-snap" type="checkbox" checked class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer">
+                        Snap til gitter (10px)
+                    </label>
+                </div>
+
+                <!-- 400x550 Pitch Canvas -->
+                <div class="pitch-wrapper">
+                    <canvas id="editorCanvas" class="pitch-canvas"></canvas>
+
+                    <!-- Live Coordinates & Hint Overlay -->
+                    <div class="absolute bottom-2 left-2 right-2 flex items-center justify-between pointer-events-none">
+                        <div id="coord-display" class="bg-slate-900/85 text-white text-xs font-mono px-2.5 py-1 rounded-lg backdrop-blur-sm shadow">
+                            Træk spillere eller bold på banen
+                        </div>
+                        <div id="anim-indicator" class="hidden bg-amber-500 text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow animate-pulse">
+                            Afspiller...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Legend & Preview Bar -->
+                <div class="mt-3 flex flex-wrap items-center justify-between gap-2 px-1">
+                    <div class="flex items-center gap-3 text-xs font-semibold text-slate-600">
+                        <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-blue-600 inline-block"></span> Spiller 1</span>
+                        <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-blue-400 inline-block"></span> Spiller 2</span>
+                        <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-500 inline-block"></span> Forsvar (F)</span>
+                    </div>
+                    <button id="btn-preview-anim" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-sm transition flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                        <span>🎬</span> Forhåndsvis animation
+                    </button>
+                </div>
+            </div>
+
+            <!-- Helpful Tip Card -->
+            <div class="w-full max-w-[400px] bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-900 leading-relaxed">
+                <strong>Tip:</strong> Vælg <em>Slut: Valg 1</em> eller <em>Slut: Valg 2</em> til højre for at se spøgelsespositioner og stiplede pile fra start til slut. Træk objekterne for at tegne afleveringer og løb.
+            </div>
+        </section>
+
+        <!-- RIGHT COLUMN: Editor Controls -->
+        <section class="flex flex-col gap-5">
+
+            <!-- 1. Scenario Header & Phase Tabs -->
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+                <div class="grid grid-cols-1 sm:grid-cols-[100px_1fr] gap-4 mb-5">
+                    <div>
+                        <label for="input-scen-id" class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Scenarie ID</label>
+                        <input id="input-scen-id" type="number" min="1" value="4" class="w-full px-3 py-2 rounded-xl border border-slate-300 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label for="input-scen-title" class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Scenarie Titel</label>
+                        <input id="input-scen-title" type="text" placeholder="F.eks. Stikningen i Dybden" class="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <!-- Phase Tabs -->
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100">
+                    <div id="phase-tabs-container" class="flex flex-wrap items-center gap-2">
+                        <!-- Dynamically populated -->
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="btn-add-phase" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer">
+                            + Tilføj trin
+                        </button>
+                        <button id="btn-delete-phase" class="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold transition cursor-pointer hidden">
+                            🗑️ Slet trin
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Phase Settings -->
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+                <h2 class="text-sm font-extrabold uppercase tracking-wider text-slate-800 mb-4 flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-lg bg-slate-900 text-white text-xs flex items-center justify-center" id="phase-num-badge">1</span>
+                    Indstillinger for trin
+                </h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <!-- Phase Type Toggle -->
+                    <div>
+                        <span class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Beslutningstype</span>
+                        <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl">
+                            <button id="btn-type-action" class="py-2 px-2 rounded-lg text-xs font-bold transition cursor-pointer">
+                                🔘 Knapper (Aflever/Drible)
+                            </button>
+                            <button id="btn-type-zone" class="py-2 px-2 rounded-lg text-xs font-bold transition cursor-pointer">
+                                🎯 Zoner (Klik på bane)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Actor Toggle -->
+                    <div>
+                        <span class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Aktiv spiller (gul aura)</span>
+                        <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl">
+                            <button id="btn-actor-1" class="py-2 px-2 rounded-lg text-xs font-bold transition cursor-pointer">
+                                🔵 Spiller 1
+                            </button>
+                            <button id="btn-actor-2" class="py-2 px-2 rounded-lg text-xs font-bold transition cursor-pointer">
+                                🩵 Spiller 2
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Instruction Input -->
+                <div>
+                    <label for="input-instruction" class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Instruktion (vises i top-banneret)</label>
+                    <input id="input-instruction" type="text" placeholder="Trin 1: Du er Spiller 1..." class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+
+            <!-- 3. Canvas Edit State Switcher & Productivity Helpers -->
+            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <h2 class="text-sm font-extrabold uppercase tracking-wider text-slate-800">
+                        Redigér positioner på banen
+                    </h2>
+                    <span class="text-xs text-slate-500 font-medium">Skift mellem start og de to udfald</span>
+                </div>
+
+                <!-- Segmented Tabs -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 p-1.5 bg-slate-100 rounded-2xl mb-4">
+                    <button id="tab-edit-start" class="py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer text-center">
+                        1. Start-positioner
+                    </button>
+                    <button id="tab-edit-end0" class="py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer text-center">
+                        2. Slut: Valg 1
+                    </button>
+                    <button id="tab-edit-end1" class="py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer text-center">
+                        3. Slut: Valg 2
+                    </button>
+                </div>
+
+                <!-- Quick Productivity Helpers -->
+                <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+                    <span class="text-xs font-bold text-slate-500 mr-1">Hurtig-værktøjer:</span>
+                    <button id="btn-copy-prev" class="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" title="Kopiér slutpositionerne fra forrige trins rigtige svar ind som startposition her">
+                        ⏮️ Hent fra forrige trins rigtige slut
+                    </button>
+                    <button id="btn-copy-start-to-end" class="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" title="Nulstil nuværende slutpositioner til at matche startpositionerne">
+                        🔄 Kopiér start → slut
+                    </button>
+                    <button id="btn-ball-to-p1" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer">
+                        ⚽ Bold → 1
+                    </button>
+                    <button id="btn-ball-to-p2" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer">
+                        ⚽ Bold → 2
+                    </button>
+                </div>
+            </div>
+
+            <!-- 4. Options / Zones Configuration Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Choice 0 Card -->
+                <div id="card-choice-0" class="bg-white rounded-2xl p-5 shadow-sm border-2 transition cursor-pointer">
+                    <div class="flex items-center justify-between gap-2 mb-3">
+                        <div class="flex items-center gap-2">
+                            <span id="badge-choice-0" class="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-100 text-amber-800">Valg 1</span>
+                            <button type="button" data-focus-end="0" class="text-xs font-semibold text-blue-600 hover:underline cursor-pointer">Redigér på bane →</button>
+                        </div>
+                        <label class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 cursor-pointer select-none">
+                            <input id="radio-correct-0" type="radio" name="correctChoice" value="0" class="w-4 h-4 text-emerald-600 focus:ring-emerald-500 cursor-pointer">
+                            Rigtigt svar ✅
+                        </label>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="grid grid-cols-1 gap-2" id="choice-0-top-row">
+                            <div class="flex gap-2">
+                                <div id="zone-id-wrap-0" class="w-20 hidden">
+                                    <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Zone ID</label>
+                                    <input id="input-choice-id-0" type="text" maxlength="3" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm font-bold text-center">
+                                </div>
+                                <div class="flex-1">
+                                    <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1" id="label-title-0">Knap-tekst</label>
+                                    <input id="input-choice-label-0" type="text" class="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm font-semibold">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Zone Radius Slider (only for zone mode) -->
+                        <div id="zone-radius-wrap-0" class="hidden bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="text-[11px] font-bold uppercase text-slate-500">Zone-radius (r)</label>
+                                <span id="val-radius-0" class="text-xs font-mono font-bold text-slate-700">35px</span>
+                            </div>
+                            <input id="input-radius-0" type="range" min="20" max="55" value="35" class="w-full accent-blue-600 cursor-pointer">
+                        </div>
+
+                        <div>
+                            <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Feedback til spilleren</label>
+                            <textarea id="input-choice-feedback-0" rows="3" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs sm:text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"></textarea>
+                        </div>
+
+                        <button type="button" id="btn-preview-choice-0" class="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer">
+                            🎬 Forhåndsvis dette udfald
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Choice 1 Card -->
+                <div id="card-choice-1" class="bg-white rounded-2xl p-5 shadow-sm border-2 transition cursor-pointer">
+                    <div class="flex items-center justify-between gap-2 mb-3">
+                        <div class="flex items-center gap-2">
+                            <span id="badge-choice-1" class="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800">Valg 2</span>
+                            <button type="button" data-focus-end="1" class="text-xs font-semibold text-blue-600 hover:underline cursor-pointer">Redigér på bane →</button>
+                        </div>
+                        <label class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 cursor-pointer select-none">
+                            <input id="radio-correct-1" type="radio" name="correctChoice" value="1" class="w-4 h-4 text-emerald-600 focus:ring-emerald-500 cursor-pointer">
+                            Rigtigt svar ✅
+                        </label>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="flex gap-2">
+                            <div id="zone-id-wrap-1" class="w-20 hidden">
+                                <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Zone ID</label>
+                                <input id="input-choice-id-1" type="text" maxlength="3" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm font-bold text-center">
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1" id="label-title-1">Knap-tekst</label>
+                                <input id="input-choice-label-1" type="text" class="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm font-semibold">
+                            </div>
+                        </div>
+
+                        <!-- Zone Radius Slider (only for zone mode) -->
+                        <div id="zone-radius-wrap-1" class="hidden bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="text-[11px] font-bold uppercase text-slate-500">Zone-radius (r)</label>
+                                <span id="val-radius-1" class="text-xs font-mono font-bold text-slate-700">35px</span>
+                            </div>
+                            <input id="input-radius-1" type="range" min="20" max="55" value="35" class="w-full accent-blue-600 cursor-pointer">
+                        </div>
+
+                        <div>
+                            <label class="block text-[11px] font-bold uppercase text-slate-500 mb-1">Feedback til spilleren</label>
+                            <textarea id="input-choice-feedback-1" rows="3" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs sm:text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"></textarea>
+                        </div>
+
+                        <button type="button" id="btn-preview-choice-1" class="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer">
+                            🎬 Forhåndsvis dette udfald
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ========================================================= -->
+    <!-- MODAL 1: FULL INTERACTIVE TEST MODE ("Test Scenarie")     -->
+    <!-- ========================================================= -->
+    <div id="modal-test" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4 overflow-y-auto">
+        <div class="w-full max-w-[420px] bg-white rounded-2xl shadow-2xl overflow-hidden my-auto">
+            <!-- Simulator Header -->
+            <div class="bg-slate-900 text-white px-4 py-3 flex items-center justify-between">
+                <div>
+                    <p class="text-[10px] uppercase tracking-widest text-emerald-400 font-bold">Test-tilstand • 3-Trins Raketten</p>
+                    <h3 id="sim-scen-title" class="text-base font-extrabold leading-tight">Scenarie</h3>
+                </div>
+                <button id="btn-close-test" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold cursor-pointer">
+                    ✕
+                </button>
+            </div>
+
+            <!-- Simulator Pitch Area -->
+            <div class="relative w-full aspect-[400/550] bg-emerald-400">
+                <canvas id="simCanvas" class="w-full h-full block cursor-pointer"></canvas>
+
+                <!-- Top Instruction Banner -->
+                <div id="sim-banner" class="sim-banner">
+                    <span id="sim-banner-text">Instruktion</span>
+                </div>
+
+                <!-- Bottom Action Buttons -->
+                <div id="sim-decision-panel" class="sim-decision-panel">
+                    <button id="sim-btn-opt-0" class="sim-btn sim-btn-action w-1/2">Valg 1</button>
+                    <button id="sim-btn-opt-1" class="sim-btn sim-btn-dribble w-1/2">Valg 2</button>
+                </div>
+
+                <!-- Result Overlay -->
+                <div id="sim-result-screen" class="sim-overlay">
+                    <div class="bg-white rounded-2xl p-6 w-full shadow-2xl">
+                        <div id="sim-dots" class="flex justify-center gap-2 mb-3"></div>
+                        <div id="sim-result-icon" class="text-5xl mb-2">✅</div>
+                        <h4 id="sim-result-title" class="text-xl font-extrabold text-slate-800 mb-2">Trin 1 klaret!</h4>
+                        <p id="sim-result-text" class="text-slate-600 text-sm font-medium mb-5">Feedback</p>
+                        <button id="sim-btn-next" class="sim-btn sim-btn-primary">Næste Trin</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- MODAL 2: EXPORT CODE                                      -->
+    <!-- ========================================================= -->
+    <div id="modal-export" class="fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-3xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-extrabold">Eksportér JS-kode</h3>
+                    <p class="text-xs text-slate-400">Indsæt objektet direkte i <code class="text-blue-300">const scenarios = [ ... ]</code> i din 3-Trins Raketten HTML-fil.</p>
+                </div>
+                <button id="btn-close-export" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold cursor-pointer">✕</button>
+            </div>
+            <div class="p-5 overflow-y-auto flex-1 bg-slate-50">
+                <textarea id="export-code-area" readonly rows="18" class="w-full font-mono text-xs bg-slate-900 text-emerald-300 p-4 rounded-xl border border-slate-700 focus:outline-none leading-relaxed"></textarea>
+            </div>
+            <div class="px-6 py-4 bg-white border-t border-slate-200 flex flex-wrap items-center justify-end gap-3">
+                <button id="btn-close-export-2" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold cursor-pointer">Luk</button>
+                <button id="btn-copy-code" class="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow transition flex items-center gap-2 cursor-pointer">
+                    <span>📋</span> Kopiér JS-kode
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- MODAL 3: IMPORT / LOAD TEMPLATE                           -->
+    <!-- ========================================================= -->
+    <div id="modal-import" class="fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-extrabold">Indlæs eksempel eller importér kode</h3>
+                    <p class="text-xs text-slate-400">Indsæt et eksisterende scenarie-objekt (JS eller JSON) for at redigere det.</p>
+                </div>
+                <button id="btn-close-import" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold cursor-pointer">✕</button>
+            </div>
+            <div class="p-5 space-y-4 overflow-y-auto">
+                <div>
+                    <span class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Hurtig-skabeloner</span>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="btn-load-tpl-starter" class="px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-bold border border-blue-200 cursor-pointer">
+                            ⚽ Stikningen i Dybden (Standard)
+                        </button>
+                        <button id="btn-load-tpl-wallpass" class="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 cursor-pointer">
+                            🔁 Vægspillet 1-2 (Original)
+                        </button>
+                        <button id="btn-load-tpl-blank" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-200 cursor-pointer">
+                            📄 Nyt tomt 3-trins scenarie
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label for="import-code-area" class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Indsæt Scenarie JS-objekt eller JSON</label>
+                    <textarea id="import-code-area" rows="10" placeholder="{ id: 4, title: 'Mit Scenarie', phases: [ ... ] }" class="w-full font-mono text-xs bg-slate-50 text-slate-800 p-3.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                    <p id="import-error" class="text-xs text-red-600 font-semibold mt-1.5 hidden"></p>
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+                <button id="btn-close-import-2" class="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-bold cursor-pointer">Annullér</button>
+                <button id="btn-do-import" class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow cursor-pointer">
+                    Indlæs i bygger
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl border border-slate-700 text-sm font-semibold flex items-center gap-2 pointer-events-none">
+        <span id="toast-icon">✅</span>
+        <span id="toast-msg">Besked</span>
+    </div>
+
+<script>
+(() => {
+    // =========================================================================
+    // CONSTANTS & TEMPLATES
+    // =========================================================================
+    const LOGICAL_W = 400;
+    const LOGICAL_H = 550;
+    const ANIM_DURATION = 1200; // Matches 3-Trins Raketten exactly
+
+    function deepClone(obj) {
+        return JSON.parse(JSON.stringify(obj));
+    }
+
+    function createDefaultPositions() {
+        return {
+            p1: { x: 160, y: 420 },
+            p2: { x: 270, y: 380 },
+            d:  { x: 200, y: 310 },
+            ball: { x: 160, y: 420 }
+        };
+    }
+
+    function createBlankPhase(index) {
+        const base = createDefaultPositions();
+        return {
+            type: 'action',
+            actor: 1,
+            instruction: `Trin ${index + 1}: Beskriv situationen og spørgsmålet her...`,
+            start: deepClone(base),
+            options: [
+                {
+                    id: 'opt1',
+                    label: 'Aflever',
+                    correct: true,
+                    feedback: 'Godt valg! Forklar hvorfor dette var den rigtige beslutning.',
+                    end: { p1: { x: 160, y: 400 }, p2: { x: 270, y: 360 }, d: { x: 200, y: 330 }, ball: { x: 270, y: 360 } }
+                },
+                {
+                    id: 'opt2',
+                    label: 'Drible',
+                    correct: false,
+                    feedback: 'Øv! Forklar hvorfor modstanderen vandt bolden her.',
+                    end: { p1: { x: 190, y: 350 }, p2: { x: 270, y: 380 }, d: { x: 190, y: 350 }, ball: { x: 190, y: 350 } }
+                }
+            ],
+            zones: [
+                {
+                    id: 'A',
+                    label: 'Zone A',
+                    x: 150,
+                    y: 240,
+                    r: 35,
+                    correct: true,
+                    feedback: 'Super løb ind i det frie rum!',
+                    end: { p1: { x: 150, y: 240 }, p2: { x: 270, y: 380 }, d: { x: 210, y: 320 }, ball: { x: 270, y: 380 } }
+                },
+                {
+                    id: 'B',
+                    label: 'Zone B',
+                    x: 280,
+                    y: 440,
+                    r: 35,
+                    correct: false,
+                    feedback: 'Du løber væk fra det farlige rum.',
+                    end: { p1: { x: 280, y: 440 }, p2: { x: 270, y: 380 }, d: { x: 250, y: 360 }, ball: { x: 270, y: 380 } }
+                }
+            ]
+        };
+    }
+
+    // Starter template so the canvas feels immediately alive
+    function getStarterTemplate() {
+        return {
+            id: 4,
+            title: "Stikningen i Dybden",
+            phases: [
+                {
+                    type: 'action',
+                    actor: 1,
+                    instruction: "Trin 1: Du (Spiller 1) har bolden på midten. Forsvareren står højt. Hvad gør du?",
+                    start: { p1: { x: 140, y: 430 }, p2: { x: 270, y: 360 }, d: { x: 200, y: 310 }, ball: { x: 140, y: 430 } },
+                    options: [
+                        {
+                            id: 'opt1',
+                            label: 'Driv ind mod midten',
+                            correct: true,
+                            feedback: "Flot! Du trækker forsvareren ind mod dig og åbner rummet bagved.",
+                            end: { p1: { x: 190, y: 370 }, p2: { x: 270, y: 340 }, d: { x: 200, y: 320 }, ball: { x: 190, y: 370 } }
+                        },
+                        {
+                            id: 'opt2',
+                            label: 'Skyd langt udefra',
+                            correct: false,
+                            feedback: "Alt for langt ude! Forsvareren blokerer nemt dit skud.",
+                            end: { p1: { x: 140, y: 420 }, p2: { x: 270, y: 360 }, d: { x: 200, y: 310 }, ball: { x: 200, y: 310 } }
+                        }
+                    ],
+                    zones: createBlankPhase(0).zones
+                },
+                {
+                    type: 'zone',
+                    actor: 2,
+                    instruction: "Trin 2: Du er Spiller 2 (uden bold). Hvor skal du løbe hen for at modtage stikningen?",
+                    start: { p1: { x: 190, y: 370 }, p2: { x: 270, y: 340 }, d: { x: 200, y: 320 }, ball: { x: 190, y: 370 } },
+                    options: createBlankPhase(1).options,
+                    zones: [
+                        {
+                            id: 'A',
+                            label: 'Dybdeløb bag forsvaret',
+                            x: 250,
+                            y: 190,
+                            r: 35,
+                            correct: true,
+                            feedback: "Perfekt timet dybdeløb! Du er nu helt fri bag forsvareren.",
+                            end: { p1: { x: 190, y: 360 }, p2: { x: 250, y: 190 }, d: { x: 200, y: 310 }, ball: { x: 190, y: 360 } }
+                        },
+                        {
+                            id: 'B',
+                            label: 'Mød bolden kort',
+                            x: 260,
+                            y: 410,
+                            r: 35,
+                            correct: false,
+                            feedback: "Hvis du løber tilbage, er der ingen trussel bag forsvaret.",
+                            end: { p1: { x: 190, y: 360 }, p2: { x: 260, y: 410 }, d: { x: 210, y: 340 }, ball: { x: 190, y: 360 } }
+                        }
+                    ]
+                },
+                {
+                    type: 'action',
+                    actor: 1,
+                    instruction: "Trin 3: Spiller 2 tager det perfekte dybdeløb! Hvad gør du nu?",
+                    start: { p1: { x: 190, y: 360 }, p2: { x: 250, y: 190 }, d: { x: 200, y: 310 }, ball: { x: 190, y: 360 } },
+                    options: [
+                        {
+                            id: 'opt1',
+                            label: 'Stikning i dybden',
+                            correct: true,
+                            feedback: "MÅÅÅL! En knivskarp stikning lige i fødderne på din makker!",
+                            end: { p1: { x: 190, y: 350 }, p2: { x: 230, y: 110 }, d: { x: 210, y: 260 }, ball: { x: 200, y: 20 } }
+                        },
+                        {
+                            id: 'opt2',
+                            label: 'Drible selv',
+                            correct: false,
+                            feedback: "Øv, du løb direkte ind i forsvareren i stedet for at spille din frie makker.",
+                            end: { p1: { x: 200, y: 310 }, p2: { x: 250, y: 160 }, d: { x: 200, y: 310 }, ball: { x: 200, y: 310 } }
+                        }
+                    ],
+                    zones: createBlankPhase(2).zones
+                }
+            ]
+        };
+    }
+
+    function getWallPassTemplate() {
+        return {
+            id: 1,
+            title: "Vægspillet (1-2)",
+            phases: [
+                {
+                    type: 'action',
+                    actor: 1,
+                    instruction: "Trin 1: Du er Spiller 1 (boldholder). Forsvaret presser hårdt. Hvad gør du?",
+                    start: { p1: {x: 150, y: 420}, p2: {x: 280, y: 380}, d: {x: 150, y: 350}, ball: {x: 150, y: 420} },
+                    options: [
+                        { id: 'pass', label: 'Aflever', correct: true, feedback: "Godt læst! Du slipper bolden inden modstanderen tackler dig.", end: { p1: {x: 150, y: 480}, p2: {x: 280, y: 420}, d: {x: 150, y: 400}, ball: {x: 280, y: 420} } },
+                        { id: 'dribble', label: 'Drible', correct: false, feedback: "Øv! Modstanderen kom i fuld fart og tacklede dig. Husk at aflevere væk fra presset.", end: { p1: {x: 150, y: 400}, p2: {x: 280, y: 420}, d: {x: 150, y: 400}, ball: {x: 150, y: 400} } }
+                    ],
+                    zones: createBlankPhase(0).zones
+                },
+                {
+                    type: 'zone',
+                    actor: 1,
+                    instruction: "Trin 2: Du har lige afleveret. Hvor løber du hen for at få den tilbage?",
+                    start: { p1: {x: 150, y: 420}, p2: {x: 280, y: 380}, d: {x: 150, y: 380}, ball: {x: 280, y: 420} },
+                    options: createBlankPhase(1).options,
+                    zones: [
+                        { id: 'A', label: 'Stå stille', x: 150, y: 480, r: 30, correct: false, feedback: "Du stod stille og kiggede. Nu er forsvaret nede over din medspiller!", end: { p1: {x: 150, y: 480}, p2: {x: 280, y: 420}, d: {x: 250, y: 420}, ball: {x: 280, y: 420} } },
+                        { id: 'B', label: 'Løb frem', x: 150, y: 250, r: 35, correct: true, feedback: "Super løb! Du suser forbi forsvarsspilleren og tilbyder dig i bagrummet.", end: { p1: {x: 150, y: 250}, p2: {x: 280, y: 420}, d: {x: 200, y: 380}, ball: {x: 280, y: 420} } }
+                    ]
+                },
+                {
+                    type: 'action',
+                    actor: 2,
+                    instruction: "Trin 3: Du (Spiller 2) har bolden, og din makker tager et løb i dybden!",
+                    start: { p1: {x: 150, y: 250}, p2: {x: 280, y: 420}, d: {x: 200, y: 380}, ball: {x: 280, y: 420} },
+                    options: [
+                        { id: 'pass', label: 'Spil i dybden', correct: true, feedback: "MÅÅÅL! Det er præcis sådan et perfekt vægspil ser ud!", end: { p1: {x: 150, y: 150}, p2: {x: 280, y: 420}, d: {x: 200, y: 300}, ball: {x: 150, y: 150} } },
+                        { id: 'dribble', label: 'Drible selv', correct: false, feedback: "Nej, du driblede ind i forsvaret og ignorerede din medspillers flotte løb.", end: { p1: {x: 150, y: 250}, p2: {x: 230, y: 380}, d: {x: 230, y: 380}, ball: {x: 230, y: 380} } }
+                    ],
+                    zones: createBlankPhase(2).zones
+                }
+            ]
+        };
+    }
+
+    // =========================================================================
+    // APP STATE
+    // =========================================================================
+    let scenario = getStarterTemplate();
+    let currentPhaseIdx = 0;
+    let editMode = 'start'; // 'start' | 'end0' | 'end1'
+    let snapToGrid = true;
+
+    // Editor Drag & Animation State
+    let dragTarget = null; // { kind: 'entity'|'zone', key: 'p1'|'p2'|'d'|'ball'|0|1 }
+    let hoverTarget = null;
+    let editorAnim = {
+        active: false,
+        startTime: 0,
+        choiceIdx: 0,
+        positions: null
+    };
+
+    // Canvas references
+    const editorCanvas = document.getElementById('editorCanvas');
+    const editorCtx = editorCanvas.getContext('2d');
+    const simCanvas = document.getElementById('simCanvas');
+    const simCtx = simCanvas.getContext('2d');
+
+    // Setup high-DPI scaling while keeping exact 400x550 logical coordinates
+    function setupHiDPICanvas(canvas, ctx) {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = LOGICAL_W * dpr;
+        canvas.height = LOGICAL_H * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    setupHiDPICanvas(editorCanvas, editorCtx);
+    setupHiDPICanvas(simCanvas, simCtx);
+
+    // =========================================================================
+    // MATH & HELPERS
+    // =========================================================================
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+    function dist(p1, p2) { return Math.hypot(p2.x - p1.x, p2.y - p1.y); }
+    function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+
+    function snapCoord(val, maxVal) {
+        let v = clamp(Math.round(val), 10, maxVal - 10);
+        if (snapToGrid) {
+            v = Math.round(v / 10) * 10;
+            v = clamp(v, 10, maxVal - 10);
+        }
+        return v;
+    }
+
+    function getCurrentPhase() {
+        return scenario.phases[currentPhaseIdx];
+    }
+
+    function getChoicesArray(phase) {
+        return phase.type === 'action' ? phase.options : phase.zones;
+    }
+
+    function getActivePositionsObject() {
+        const phase = getCurrentPhase();
+        if (editMode === 'start') return phase.start;
+        const choices = getChoicesArray(phase);
+        return editMode === 'end0' ? choices[0].end : choices[1].end;
+    }
+
+    // Toast notification helper
+    let toastTimer = null;
+    function showToast(msg, icon = '✅') {
+        const toast = document.getElementById('toast');
+        document.getElementById('toast-msg').textContent = msg;
+        document.getElementById('toast-icon').textContent = icon;
+        toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
+    }
+
+    // =========================================================================
+    // SHARED DRAWING FUNCTIONS (Exact match with 3-Trins Raketten)
+    // =========================================================================
+    function drawField(ctx, showGrid = false) {
+        // Alternating green stripes
+        for (let i = 0; i < LOGICAL_H; i += 40) {
+            ctx.fillStyle = (i / 40) % 2 === 0 ? '#4ade80' : '#22c55e';
+            ctx.fillRect(0, i, LOGICAL_W, 40);
+        }
+
+        // Optional subtle 20px visual grid when snap is on in editor
+        if (showGrid) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let x = 20; x < LOGICAL_W; x += 20) {
+                ctx.moveTo(x, 0); ctx.lineTo(x, LOGICAL_H);
+            }
+            for (let y = 20; y < LOGICAL_H; y += 20) {
+                ctx.moveTo(0, y); ctx.lineTo(LOGICAL_W, y);
+            }
+            ctx.stroke();
+        }
+
+        // Penalty box & 6-yard box
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.rect(80, -5, 240, 120);
+        ctx.rect(130, -5, 140, 40);
+        ctx.stroke();
+
+        // Goal & grey net grid
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(150, 0, 100, 15);
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 150; i <= 250; i += 10) {
+            ctx.moveTo(i, 0); ctx.lineTo(i, 15);
+        }
+        for (let i = 0; i <= 15; i += 5) {
+            ctx.moveTo(150, i); ctx.lineTo(250, i);
+        }
+        ctx.stroke();
+    }
+
+    function drawPlayer(ctx, x, y, color, text, isControlled, options = {}) {
+        const { alpha = 1, size = 14, pulseAura = true } = options;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+
+        // Yellow glowing aura for active actor
+        if (isControlled && alpha === 1) {
+            const pulse = pulseAura ? Math.sin(Date.now() / 150) * 2 : 0;
+            ctx.beginPath();
+            ctx.arc(x, y, size + 6 + pulse, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(253, 224, 71, 0.6)';
+            ctx.fill();
+        }
+
+        // Shadow
+        ctx.beginPath();
+        ctx.arc(x, y + 4, size, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fill();
+
+        // Body
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Label
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, x, y + 1);
+
+        ctx.restore();
+    }
+
+    function drawBall(ctx, x, y, alpha = 1) {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(x + 2, y + 2, 6, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = '#000000';
+        ctx.beginPath();
+        ctx.arc(x, y, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    function drawZoneCircle(ctx, z, isHighlighted = false, pulse = true) {
+        const p = pulse ? Math.sin(Date.now() / 200) * 2 : 0;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(z.x, z.y, z.r + p, 0, Math.PI * 2);
+        ctx.strokeStyle = isHighlighted ? '#ffffff' : 'rgba(253, 224, 71, 0.95)';
+        ctx.lineWidth = isHighlighted ? 4 : 3;
+        ctx.setLineDash([6, 6]);
+        ctx.stroke();
+        ctx.fillStyle = z.correct ? 'rgba(253, 224, 71, 0.28)' : 'rgba(253, 224, 71, 0.16)';
+        ctx.fill();
+        ctx.setLineDash([]);
+
+        // Badge for Zone ID
+        ctx.font = 'bold 14px Inter, sans-serif';
+        const label = z.id || '?';
+        const w = ctx.measureText(label).width;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillRect(z.x - w / 2 - 5, z.y - 10, w + 10, 20);
+        ctx.fillStyle = '#0f172a';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, z.x, z.y + 1);
+        ctx.restore();
+    }
+
+    function drawDashedArrow(ctx, from, to, color, stopOffset = 16) {
+        const d = dist(from, to);
+        if (d < 8) return;
+
+        const angle = Math.atan2(to.y - from.y, to.x - from.x);
+        const startX = from.x + Math.cos(angle) * 8;
+        const startY = from.y + Math.sin(angle) * 8;
+        const endX = to.x - Math.cos(angle) * Math.min(stopOffset, d * 0.4);
+        const endY = to.y - Math.sin(angle) * Math.min(stopOffset, d * 0.4);
+
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+
+        // Arrowhead
+        ctx.setLineDash([]);
+        const headLen = 9;
+        ctx.beginPath();
+        ctx.moveTo(endX, endY);
+        ctx.lineTo(endX - headLen * Math.cos(angle - Math.PI / 6), endY - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(endX - headLen * Math.cos(angle + Math.PI / 6), endY - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // =========================================================================
+    // EDITOR RENDER LOOP
+    // =========================================================================
+    function renderEditor(timestamp) {
+        const phase = getCurrentPhase();
+
+        editorCtx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
+        drawField(editorCtx, snapToGrid && !editorAnim.active);
+
+        let drawPos;
+
+        if (editorAnim.active) {
+            if (!editorAnim.startTime) editorAnim.startTime = timestamp;
+            const t = Math.min((timestamp - editorAnim.startTime) / ANIM_DURATION, 1);
+            const easeT = easeOut(t);
+            const target = getChoicesArray(phase)[editorAnim.choiceIdx].end;
+
+            drawPos = {
+                p1: { x: lerp(phase.start.p1.x, target.p1.x, easeT), y: lerp(phase.start.p1.y, target.p1.y, easeT) },
+                p2: { x: lerp(phase.start.p2.x, target.p2.x, easeT), y: lerp(phase.start.p2.y, target.p2.y, easeT) },
+                d:  { x: lerp(phase.start.d.x, target.d.x, easeT),   y: lerp(phase.start.d.y, target.d.y, easeT) },
+                ball: { x: lerp(phase.start.ball.x, target.ball.x, easeT), y: lerp(phase.start.ball.y, target.ball.y, easeT) }
+            };
+
+            if (t >= 1) {
+                setTimeout(() => {
+                    editorAnim.active = false;
+                    document.getElementById('anim-indicator').classList.add('hidden');
+                }, 400);
+            }
+        } else {
+            drawPos = getActivePositionsObject();
+
+            // Draw Zones if phase.type === 'zone'
+            if (phase.type === 'zone') {
+                phase.zones.forEach((z, idx) => {
+                    const isActiveZone = (editMode === 'end0' && idx === 0) || (editMode === 'end1' && idx === 1);
+                    const isDragged = dragTarget && dragTarget.kind === 'zone' && dragTarget.key === idx;
+                    // In start mode, both zones are fully visible & draggable; in end mode, highlight the selected zone
+                    editorCtx.save();
+                    if (editMode !== 'start' && !isActiveZone) editorCtx.globalAlpha = 0.35;
+                    drawZoneCircle(editorCtx, z, isDragged || isActiveZone, editMode === 'start');
+                    editorCtx.restore();
+                });
+            }
+
+            // Draw Ghost Start Positions & Directional Arrows when editing an End State
+            if (editMode === 'end0' || editMode === 'end1') {
+                const startPos = phase.start;
+
+                // Ghosts
+                drawPlayer(editorCtx, startPos.p2.x, startPos.p2.y, '#3b82f6', '2', false, { alpha: 0.32 });
+                drawPlayer(editorCtx, startPos.d.x, startPos.d.y, '#ef4444', 'F', false, { alpha: 0.32 });
+                drawPlayer(editorCtx, startPos.p1.x, startPos.p1.y, '#2563eb', '1', false, { alpha: 0.32 });
+                drawBall(editorCtx, startPos.ball.x, startPos.ball.y, 0.35);
+
+                // Movement arrows
+                drawDashedArrow(editorCtx, startPos.p1, drawPos.p1, 'rgba(37, 99, 235, 0.85)', 16);
+                drawDashedArrow(editorCtx, startPos.p2, drawPos.p2, 'rgba(59, 130, 246, 0.85)', 16);
+                drawDashedArrow(editorCtx, startPos.d,  drawPos.d,  'rgba(239, 68, 68, 0.85)', 16);
+                drawDashedArrow(editorCtx, startPos.ball, drawPos.ball, 'rgba(255, 255, 255, 0.95)', 9);
+            }
+        }
+
+        // Draw active players & ball
+        drawPlayer(editorCtx, drawPos.p2.x, drawPos.p2.y, '#3b82f6', '2', phase.actor === 2 && !editorAnim.active);
+        drawPlayer(editorCtx, drawPos.d.x,  drawPos.d.y,  '#ef4444', 'F', false);
+        drawPlayer(editorCtx, drawPos.p1.x, drawPos.p1.y, '#2563eb', '1', phase.actor === 1 && !editorAnim.active);
+        drawBall(editorCtx, drawPos.ball.x, drawPos.ball.y);
+
+        requestAnimationFrame(renderEditor);
+    }
+
+    // =========================================================================
+    // EDITOR CANVAS DRAG & DROP (MOUSE + TOUCH)
+    // =========================================================================
+    function getCanvasCoords(canvas, evt) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+        const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+        return {
+            x: ((clientX - rect.left) / rect.width) * LOGICAL_W,
+            y: ((clientY - rect.top) / rect.height) * LOGICAL_H
+        };
+    }
+
+    function hitTestEditor(pt) {
+        const phase = getCurrentPhase();
+        const pos = getActivePositionsObject();
+
+        // Check ball first (so you can grab ball off a player easily)
+        if (dist(pt, pos.ball) <= 13) return { kind: 'entity', key: 'ball', label: 'Bold' };
+        if (dist(pt, pos.p1) <= 18)   return { kind: 'entity', key: 'p1',   label: 'Spiller 1' };
+        if (dist(pt, pos.p2) <= 18)   return { kind: 'entity', key: 'p2',   label: 'Spiller 2' };
+        if (dist(pt, pos.d)  <= 18)   return { kind: 'entity', key: 'd',    label: 'Forsvarer (F)' };
+
+        // Check draggable zones when in zone mode & start editing mode
+        if (phase.type === 'zone' && editMode === 'start') {
+            for (let i = phase.zones.length - 1; i >= 0; i--) {
+                const z = phase.zones[i];
+                if (dist(pt, { x: z.x, y: z.y }) <= z.r) {
+                    return { kind: 'zone', key: i, label: `Zone ${z.id}` };
+                }
+            }
+        }
+        return null;
+    }
+
+    function updateCoordDisplay(target, x, y) {
+        const el = document.getElementById('coord-display');
+        if (!target) {
+            el.textContent = 'Træk spillere eller bold på banen';
+        } else {
+            el.textContent = `${target.label}: (x: ${x}, y: ${y})`;
+        }
+    }
+
+    function onPointerDown(e) {
+        if (editorAnim.active) return;
+        const pt = getCanvasCoords(editorCanvas, e);
+        const hit = hitTestEditor(pt);
+        if (hit) {
+            if (e.cancelable) e.preventDefault();
+            dragTarget = hit;
+            editorCanvas.style.cursor = 'grabbing';
+            const pos = getActivePositionsObject();
+            const obj = hit.kind === 'entity' ? pos[hit.key] : getCurrentPhase().zones[hit.key];
+            updateCoordDisplay(hit, obj.x, obj.y);
+        }
+    }
+
+    function onPointerMove(e) {
+        if (editorAnim.active) return;
+        const pt = getCanvasCoords(editorCanvas, e);
+
+        if (dragTarget) {
+            if (e.cancelable) e.preventDefault();
+            const sx = snapCoord(pt.x, LOGICAL_W);
+            const sy = snapCoord(pt.y, LOGICAL_H);
+
+            if (dragTarget.kind === 'entity') {
+                const pos = getActivePositionsObject();
+                pos[dragTarget.key].x = sx;
+                pos[dragTarget.key].y = sy;
+            } else if (dragTarget.kind === 'zone') {
+                const z = getCurrentPhase().zones[dragTarget.key];
+                z.x = sx;
+                z.y = sy;
+            }
+            updateCoordDisplay(dragTarget, sx, sy);
+        } else {
+            const hit = hitTestEditor(pt);
+            hoverTarget = hit;
+            editorCanvas.style.cursor = hit ? 'grab' : 'default';
+            if (hit) {
+                const pos = getActivePositionsObject();
+                const obj = hit.kind === 'entity' ? pos[hit.key] : getCurrentPhase().zones[hit.key];
+                updateCoordDisplay(hit, obj.x, obj.y);
+            } else {
+                updateCoordDisplay(null);
+            }
+        }
+    }
+
+    function onPointerUp() {
+        if (dragTarget) {
+            dragTarget = null;
+            editorCanvas.style.cursor = 'grab';
+        }
+    }
+
+    editorCanvas.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mouseup', onPointerUp);
+    editorCanvas.addEventListener('touchstart', onPointerDown, { passive: false });
+    window.addEventListener('touchmove', onPointerMove, { passive: false });
+    window.addEventListener('touchend', onPointerUp);
+
+    // =========================================================================
+    // UI SYNC & EVENT HANDLERS
+    // =========================================================================
+    function syncUI() {
+        const phase = getCurrentPhase();
+        const choices = getChoicesArray(phase);
+
+        // Scenario Header
+        document.getElementById('input-scen-id').value = scenario.id;
+        document.getElementById('input-scen-title').value = scenario.title;
+
+        // Phase Tabs
+        const tabsEl = document.getElementById('phase-tabs-container');
+        tabsEl.innerHTML = '';
+        scenario.phases.forEach((ph, idx) => {
+            const btn = document.createElement('button');
+            const isActive = idx === currentPhaseIdx;
+            btn.className = isActive
+                ? 'px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-extrabold shadow-sm cursor-pointer'
+                : 'px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer';
+            btn.textContent = `Trin ${idx + 1}`;
+            btn.addEventListener('click', () => {
+                currentPhaseIdx = idx;
+                editMode = 'start';
+                editorAnim.active = false;
+                syncUI();
+            });
+            tabsEl.appendChild(btn);
+        });
+
+        // Delete phase button visibility
+        const delBtn = document.getElementById('btn-delete-phase');
+        delBtn.classList.toggle('hidden', scenario.phases.length <= 1);
+        document.getElementById('phase-num-badge').textContent = currentPhaseIdx + 1;
+
+        // Type toggle styling
+        const btnAction = document.getElementById('btn-type-action');
+        const btnZone = document.getElementById('btn-type-zone');
+        btnAction.className = phase.type === 'action'
+            ? 'py-2 px-2 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm cursor-pointer'
+            : 'py-2 px-2 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer';
+        btnZone.className = phase.type === 'zone'
+            ? 'py-2 px-2 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm cursor-pointer'
+            : 'py-2 px-2 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer';
+
+        // Actor toggle styling
+        const btnA1 = document.getElementById('btn-actor-1');
+        const btnA2 = document.getElementById('btn-actor-2');
+        btnA1.className = phase.actor === 1
+            ? 'py-2 px-2 rounded-lg text-xs font-bold bg-blue-600 text-white shadow-sm cursor-pointer'
+            : 'py-2 px-2 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer';
+        btnA2.className = phase.actor === 2
+            ? 'py-2 px-2 rounded-lg text-xs font-bold bg-blue-500 text-white shadow-sm cursor-pointer'
+            : 'py-2 px-2 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer';
+
+        // Instruction
+        document.getElementById('input-instruction').value = phase.instruction;
+
+        // Segmented Edit Tabs
+        const label0 = phase.type === 'action' ? `Valg 1 (${choices[0].label || '1'})` : `Zone ${choices[0].id || 'A'}`;
+        const label1 = phase.type === 'action' ? `Valg 2 (${choices[1].label || '2'})` : `Zone ${choices[1].id || 'B'}`;
+
+        const tabStart = document.getElementById('tab-edit-start');
+        const tabEnd0 = document.getElementById('tab-edit-end0');
+        const tabEnd1 = document.getElementById('tab-edit-end1');
+
+        tabEnd0.textContent = `2. Slut: ${label0}`;
+        tabEnd1.textContent = `3. Slut: ${label1}`;
+
+        const activeTabCls = 'py-2.5 px-3 rounded-xl text-xs sm:text-sm font-extrabold bg-blue-600 text-white shadow-sm transition cursor-pointer text-center';
+        const inactiveTabCls = 'py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 hover:bg-slate-200/70 transition cursor-pointer text-center';
+
+        tabStart.className = editMode === 'start' ? activeTabCls : inactiveTabCls;
+        tabEnd0.className  = editMode === 'end0'  ? activeTabCls : inactiveTabCls;
+        tabEnd1.className  = editMode === 'end1'  ? activeTabCls : inactiveTabCls;
+
+        // Canvas mode badge
+        const badge = document.getElementById('canvas-mode-badge');
+        if (editMode === 'start') {
+            badge.textContent = '1. Start-positioner';
+            badge.className = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800';
+        } else if (editMode === 'end0') {
+            badge.textContent = `Slut: ${label0}`;
+            badge.className = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800';
+        } else {
+            badge.textContent = `Slut: ${label1}`;
+            badge.className = 'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800';
+        }
+
+        // Helpers enable/disable
+        document.getElementById('btn-copy-prev').disabled = currentPhaseIdx === 0;
+        document.getElementById('btn-copy-start-to-end').disabled = editMode === 'start';
+        document.getElementById('btn-preview-anim').disabled = editMode === 'start';
+
+        // Option / Zone cards
+        [0, 1].forEach(idx => {
+            const item = choices[idx];
+            const card = document.getElementById(`card-choice-${idx}`);
+            const isSelected = (idx === 0 && editMode === 'end0') || (idx === 1 && editMode === 'end1');
+            card.className = isSelected
+                ? 'bg-white rounded-2xl p-5 shadow-md border-2 border-blue-500 ring-2 ring-blue-100 transition'
+                : 'bg-white rounded-2xl p-5 shadow-sm border-2 border-slate-200 hover:border-slate-300 transition';
+
+            document.getElementById(`badge-choice-${idx}`).textContent = phase.type === 'action' ? `Valg ${idx + 1}` : `Zone ${item.id || (idx === 0 ? 'A' : 'B')}`;
+            document.getElementById(`label-title-${idx}`).textContent = phase.type === 'action' ? 'Knap-tekst' : 'Zone-navn (beskrivelse)';
+            document.getElementById(`radio-correct-${idx}`).checked = !!item.correct;
+            document.getElementById(`input-choice-label-${idx}`).value = item.label || '';
+            document.getElementById(`input-choice-feedback-${idx}`).value = item.feedback || '';
+
+            const isZone = phase.type === 'zone';
+            document.getElementById(`zone-id-wrap-${idx}`).classList.toggle('hidden', !isZone);
+            document.getElementById(`zone-radius-wrap-${idx}`).classList.toggle('hidden', !isZone);
+            if (isZone) {
+                document.getElementById(`input-choice-id-${idx}`).value = item.id || (idx === 0 ? 'A' : 'B');
+                document.getElementById(`input-radius-${idx}`).value = item.r || 35;
+                document.getElementById(`val-radius-${idx}`).textContent = `${item.r || 35}px`;
+            }
+        });
+    }
+
+    // Bind Header & Phase Inputs
+    document.getElementById('input-scen-id').addEventListener('input', (e) => {
+        scenario.id = parseInt(e.target.value, 10) || 1;
+    });
+    document.getElementById('input-scen-title').addEventListener('input', (e) => {
+        scenario.title = e.target.value;
+    });
+    document.getElementById('chk-snap').addEventListener('change', (e) => {
+        snapToGrid = e.target.checked;
+    });
+
+    document.getElementById('btn-add-phase').addEventListener('click', () => {
+        const newPhase = createBlankPhase(scenario.phases.length);
+        // Automatically carry over the previous phase's correct end position as start!
+        const prev = scenario.phases[scenario.phases.length - 1];
+        const prevChoices = getChoicesArray(prev);
+        const correctPrev = prevChoices.find(c => c.correct) || prevChoices[0];
+        if (correctPrev && correctPrev.end) {
+            newPhase.start = deepClone(correctPrev.end);
+            newPhase.options[0].end = deepClone(correctPrev.end);
+            newPhase.options[1].end = deepClone(correctPrev.end);
+            newPhase.zones[0].end = deepClone(correctPrev.end);
+            newPhase.zones[1].end = deepClone(correctPrev.end);
+        }
+        scenario.phases.push(newPhase);
+        currentPhaseIdx = scenario.phases.length - 1;
+        editMode = 'start';
+        syncUI();
+        showToast(`Trin ${currentPhaseIdx + 1} tilføjet (hentede forrige slutpositioner)`);
+    });
+
+    document.getElementById('btn-delete-phase').addEventListener('click', () => {
+        if (scenario.phases.length <= 1) return;
+        scenario.phases.splice(currentPhaseIdx, 1);
+        currentPhaseIdx = Math.max(0, currentPhaseIdx - 1);
+        editMode = 'start';
+        syncUI();
+        showToast('Trin slettet', '🗑️');
+    });
+
+    document.getElementById('btn-type-action').addEventListener('click', () => {
+        getCurrentPhase().type = 'action';
+        syncUI();
+    });
+    document.getElementById('btn-type-zone').addEventListener('click', () => {
+        getCurrentPhase().type = 'zone';
+        syncUI();
+    });
+    document.getElementById('btn-actor-1').addEventListener('click', () => {
+        getCurrentPhase().actor = 1;
+        syncUI();
+    });
+    document.getElementById('btn-actor-2').addEventListener('click', () => {
+        getCurrentPhase().actor = 2;
+        syncUI();
+    });
+    document.getElementById('input-instruction').addEventListener('input', (e) => {
+        getCurrentPhase().instruction = e.target.value;
+    });
+
+    // Edit Mode Tabs
+    document.getElementById('tab-edit-start').addEventListener('click', () => { editMode = 'start'; syncUI(); });
+    document.getElementById('tab-edit-end0').addEventListener('click', () => { editMode = 'end0'; syncUI(); });
+    document.getElementById('tab-edit-end1').addEventListener('click', () => { editMode = 'end1'; syncUI(); });
+
+    document.querySelectorAll('[data-focus-end]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            editMode = btn.dataset.focusEnd === '0' ? 'end0' : 'end1';
+            syncUI();
+        });
+    });
+
+    // Productivity Helpers
+    document.getElementById('btn-copy-prev').addEventListener('click', () => {
+        if (currentPhaseIdx === 0) return;
+        const prev = scenario.phases[currentPhaseIdx - 1];
+        const prevChoices = getChoicesArray(prev);
+        const correctPrev = prevChoices.find(c => c.correct) || prevChoices[0];
+        if (correctPrev && correctPrev.end) {
+            getCurrentPhase().start = deepClone(correctPrev.end);
+            editMode = 'start';
+            syncUI();
+            showToast('Start-positioner hentet fra forrige trins rigtige slut');
+        }
+    });
+
+    document.getElementById('btn-copy-start-to-end').addEventListener('click', () => {
+        if (editMode === 'start') return;
+        const phase = getCurrentPhase();
+        const idx = editMode === 'end0' ? 0 : 1;
+        getChoicesArray(phase)[idx].end = deepClone(phase.start);
+        showToast('Start-positioner kopieret til slut');
+    });
+
+    document.getElementById('btn-ball-to-p1').addEventListener('click', () => {
+        const pos = getActivePositionsObject();
+        pos.ball.x = pos.p1.x;
+        pos.ball.y = pos.p1.y;
+        showToast('Bold flyttet til Spiller 1', '⚽');
+    });
+
+    document.getElementById('btn-ball-to-p2').addEventListener('click', () => {
+        const pos = getActivePositionsObject();
+        pos.ball.x = pos.p2.x;
+        pos.ball.y = pos.p2.y;
+        showToast('Bold flyttet til Spiller 2', '⚽');
+    });
+
+    // Option / Zone Card Inputs
+    [0, 1].forEach(idx => {
+        document.getElementById(`radio-correct-${idx}`).addEventListener('change', () => {
+            const choices = getChoicesArray(getCurrentPhase());
+            choices[0].correct = idx === 0;
+            choices[1].correct = idx === 1;
+            syncUI();
+        });
+
+        document.getElementById(`input-choice-label-${idx}`).addEventListener('input', (e) => {
+            const choices = getChoicesArray(getCurrentPhase());
+            choices[idx].label = e.target.value;
+            // Live update segmented tab label without losing focus
+            const phase = getCurrentPhase();
+            const tabEl = document.getElementById(`tab-edit-end${idx}`);
+            if (phase.type === 'action') {
+                tabEl.textContent = `${idx + 2}. Slut: Valg ${idx + 1} (${e.target.value || (idx + 1)})`;
+            }
+        });
+
+        document.getElementById(`input-choice-id-${idx}`).addEventListener('input', (e) => {
+            const phase = getCurrentPhase();
+            if (phase.type === 'zone') {
+                phase.zones[idx].id = e.target.value.toUpperCase();
+                document.getElementById(`badge-choice-${idx}`).textContent = `Zone ${phase.zones[idx].id || '?'}`;
+                document.getElementById(`tab-edit-end${idx}`).textContent = `${idx + 2}. Slut: Zone ${phase.zones[idx].id || '?'}`;
+            }
+        });
+
+        document.getElementById(`input-radius-${idx}`).addEventListener('input', (e) => {
+            const phase = getCurrentPhase();
+            if (phase.type === 'zone') {
+                const r = parseInt(e.target.value, 10);
+                phase.zones[idx].r = r;
+                document.getElementById(`val-radius-${idx}`).textContent = `${r}px`;
+            }
+        });
+
+        document.getElementById(`input-choice-feedback-${idx}`).addEventListener('input', (e) => {
+            getChoicesArray(getCurrentPhase())[idx].feedback = e.target.value;
+        });
+
+        document.getElementById(`btn-preview-choice-${idx}`).addEventListener('click', () => {
+            editMode = idx === 0 ? 'end0' : 'end1';
+            syncUI();
+            triggerEditorPreview(idx);
+        });
+    });
+
+    function triggerEditorPreview(choiceIdx) {
+        editorAnim.active = true;
+        editorAnim.startTime = 0;
+        editorAnim.choiceIdx = choiceIdx;
+        document.getElementById('anim-indicator').classList.remove('hidden');
+    }
+
+    document.getElementById('btn-preview-anim').addEventListener('click', () => {
+        if (editMode === 'start') return;
+        triggerEditorPreview(editMode === 'end0' ? 0 : 1);
+    });
+
+    // =========================================================================
+    // EXPORT & IMPORT LOGIC
+    // =========================================================================
+    function buildCleanScenarioObject() {
+        return {
+            id: scenario.id,
+            title: scenario.title,
+            phases: scenario.phases.map(ph => {
+                const base = {
+                    type: ph.type,
+                    actor: ph.actor,
+                    instruction: ph.instruction,
+                    start: deepClone(ph.start)
+                };
+                if (ph.type === 'action') {
+                    base.options = ph.options.map((o, i) => ({
+                        id: o.id || `opt${i + 1}`,
+                        label: o.label,
+                        correct: !!o.correct,
+                        feedback: o.feedback,
+                        end: deepClone(o.end)
+                    }));
+                } else {
+                    base.zones = ph.zones.map((z, i) => ({
+                        id: z.id || (i === 0 ? 'A' : 'B'),
+                        label: z.label,
+                        x: z.x,
+                        y: z.y,
+                        r: z.r,
+                        correct: !!z.correct,
+                        feedback: z.feedback,
+                        end: deepClone(z.end)
+                    }));
+                }
+                return base;
+            })
+        };
+    }
+
+    function formatPosCompact(p) {
+        return `{ p1: {x: ${p.p1.x}, y: ${p.p1.y}}, p2: {x: ${p.p2.x}, y: ${p.p2.y}}, d: {x: ${p.d.x}, y: ${p.d.y}}, ball: {x: ${p.ball.x}, y: ${p.ball.y}} }`;
+    }
+
+    function escStr(s) {
+        return JSON.stringify(String(s || ''));
+    }
+
+    function formatScenarioAsJS(clean) {
+        const lines = [];
+        lines.push(`{`);
+        lines.push(`    id: ${clean.id},`);
+        lines.push(`    title: ${escStr(clean.title)},`);
+        lines.push(`    phases: [`);
+        clean.phases.forEach((ph, pIdx) => {
+            lines.push(`        {`);
+            lines.push(`            type: '${ph.type}',`);
+            lines.push(`            actor: ${ph.actor},`);
+            lines.push(`            instruction: ${escStr(ph.instruction)},`);
+            lines.push(`            start: ${formatPosCompact(ph.start)},`);
+            if (ph.type === 'action') {
+                lines.push(`            options: [`);
+                ph.options.forEach((o, oIdx) => {
+                    const comma = oIdx < ph.options.length - 1 ? ',' : '';
+                    lines.push(`                { id: ${escStr(o.id)}, label: ${escStr(o.label)}, correct: ${o.correct}, feedback: ${escStr(o.feedback)}, end: ${formatPosCompact(o.end)} }${comma}`);
+                });
+                lines.push(`            ]`);
+            } else {
+                lines.push(`            zones: [`);
+                ph.zones.forEach((z, zIdx) => {
+                    const comma = zIdx < ph.zones.length - 1 ? ',' : '';
+                    lines.push(`                { id: ${escStr(z.id)}, label: ${escStr(z.label)}, x: ${z.x}, y: ${z.y}, r: ${z.r}, correct: ${z.correct}, feedback: ${escStr(z.feedback)}, end: ${formatPosCompact(z.end)} }${comma}`);
+                });
+                lines.push(`            ]`);
+            }
+            lines.push(`        }${pIdx < clean.phases.length - 1 ? ',' : ''}`);
+        });
+        lines.push(`    ]`);
+        lines.push(`}`);
+        return lines.join('\n');
+    }
+
+    // Export Modal Events
+    const modalExport = document.getElementById('modal-export');
+    document.getElementById('btn-open-export').addEventListener('click', () => {
+        const code = formatScenarioAsJS(buildCleanScenarioObject());
+        document.getElementById('export-code-area').value = code;
+        modalExport.classList.remove('hidden');
+        modalExport.classList.add('flex');
+    });
+    const closeExport = () => { modalExport.classList.add('hidden'); modalExport.classList.remove('flex'); };
+    document.getElementById('btn-close-export').addEventListener('click', closeExport);
+    document.getElementById('btn-close-export-2').addEventListener('click', closeExport);
+
+    document.getElementById('btn-copy-code').addEventListener('click', () => {
+        const ta = document.getElementById('export-code-area');
+        ta.select();
+        ta.setSelectionRange(0, 99999);
+        try {
+            document.execCommand('copy');
+            showToast('JS-kode kopieret til udklipsholder!');
+        } catch (err) {
+            showToast('Kunne ikke kopiere automatisk – markér og kopiér manuelt', '⚠️');
+        }
+    });
+
+    // Import Modal Events
+    const modalImport = document.getElementById('modal-import');
+    const closeImport = () => {
+        modalImport.classList.add('hidden');
+        modalImport.classList.remove('flex');
+        document.getElementById('import-error').classList.add('hidden');
+    };
+    document.getElementById('btn-open-import').addEventListener('click', () => {
+        document.getElementById('import-code-area').value = '';
+        document.getElementById('import-error').classList.add('hidden');
+        modalImport.classList.remove('hidden');
+        modalImport.classList.add('flex');
+    });
+    document.getElementById('btn-close-import').addEventListener('click', closeImport);
+    document.getElementById('btn-close-import-2').addEventListener('click', closeImport);
+
+    function normalizeImportedScenario(raw) {
+        if (!raw || typeof raw !== 'object' || !Array.isArray(raw.phases) || raw.phases.length === 0) {
+            throw new Error('Objektet skal indeholde et "phases"-array med mindst ét trin.');
+        }
+        return {
+            id: Number(raw.id) || 4,
+            title: String(raw.title || 'Importeret Scenarie'),
+            phases: raw.phases.map((ph, idx) => {
+                const fallback = createBlankPhase(idx);
+                const start = ph.start && ph.start.p1 ? deepClone(ph.start) : fallback.start;
+                const options = Array.isArray(ph.options) && ph.options.length >= 2
+                    ? deepClone(ph.options.slice(0, 2))
+                    : fallback.options;
+                const zones = Array.isArray(ph.zones) && ph.zones.length >= 2
+                    ? deepClone(ph.zones.slice(0, 2))
+                    : fallback.zones;
+                return {
+                    type: ph.type === 'zone' ? 'zone' : 'action',
+                    actor: ph.actor === 2 ? 2 : 1,
+                    instruction: String(ph.instruction || `Trin ${idx + 1}`),
+                    start,
+                    options,
+                    zones
+                };
+            })
+        };
+    }
+
+    document.getElementById('btn-do-import').addEventListener('click', () => {
+        const rawText = document.getElementById('import-code-area').value.trim();
+        const errEl = document.getElementById('import-error');
+        if (!rawText) {
+            errEl.textContent = 'Indsæt venligst kode først.';
+            errEl.classList.remove('hidden');
+            return;
+        }
+        try {
+            // Strip trailing comma if user copied an element from an array
+            const cleaned = rawText.replace(/,\s*$/, '');
+            const parsed = Function('"use strict"; return (' + cleaned + ');')();
+            scenario = normalizeImportedScenario(parsed);
+            currentPhaseIdx = 0;
+            editMode = 'start';
+            syncUI();
+            closeImport();
+            showToast(`Scenariet "${scenario.title}" blev indlæst!`);
+        } catch (err) {
+            errEl.textContent = 'Kunne ikke læse koden: ' + err.message;
+            errEl.classList.remove('hidden');
+        }
+    });
+
+    document.getElementById('btn-load-tpl-starter').addEventListener('click', () => {
+        scenario = getStarterTemplate();
+        currentPhaseIdx = 0; editMode = 'start';
+        syncUI(); closeImport();
+        showToast('Standard-eksempel indlæst');
+    });
+    document.getElementById('btn-load-tpl-wallpass').addEventListener('click', () => {
+        scenario = getWallPassTemplate();
+        currentPhaseIdx = 0; editMode = 'start';
+        syncUI(); closeImport();
+        showToast('Vægspillet (1-2) indlæst');
+    });
+    document.getElementById('btn-load-tpl-blank').addEventListener('click', () => {
+        scenario = {
+            id: 4,
+            title: 'Nyt Scenarie',
+            phases: [createBlankPhase(0), createBlankPhase(1), createBlankPhase(2)]
+        };
+        currentPhaseIdx = 0; editMode = 'start';
+        syncUI(); closeImport();
+        showToast('Nyt tomt 3-trins scenarie oprettet');
+    });
+
+    // =========================================================================
+    // FULL INTERACTIVE TEST MODE ("Test Scenarie")
+    // =========================================================================
+    const modalTest = document.getElementById('modal-test');
+    let simState = {
+        open: false,
+        scen: null,
+        phaseIdx: 0,
+        status: 'IDLE', // WAITING | ANIMATING | RESULT
+        positions: null,
+        targetPositions: null,
+        isCorrect: false,
+        feedback: '',
+        animStart: 0,
+        particles: [],
+        rafId: null
+    };
+
+    function openTestMode() {
+        simState.scen = buildCleanScenarioObject();
+        simState.phaseIdx = 0;
+        simState.open = true;
+        document.getElementById('sim-scen-title').textContent = simState.scen.title || 'Test Scenarie';
+        modalTest.classList.remove('hidden');
+        modalTest.classList.add('flex');
+        initSimPhase();
+        if (!simState.rafId) simState.rafId = requestAnimationFrame(renderSim);
+    }
+
+    function closeTestMode() {
+        simState.open = false;
+        modalTest.classList.add('hidden');
+        modalTest.classList.remove('flex');
+        if (simState.rafId) {
+            cancelAnimationFrame(simState.rafId);
+            simState.rafId = null;
+        }
+    }
+
+    function initSimPhase() {
+        const ph = simState.scen.phases[simState.phaseIdx];
+        simState.positions = deepClone(ph.start);
+        simState.status = 'WAITING';
+        simState.animStart = 0;
+        simState.particles = [];
+
+        document.getElementById('sim-banner-text').textContent = ph.instruction;
+        document.getElementById('sim-banner').classList.add('active');
+        document.getElementById('sim-result-screen').classList.remove('active');
+
+        const panel = document.getElementById('sim-decision-panel');
+        if (ph.type === 'action') {
+            document.getElementById('sim-btn-opt-0').textContent = ph.options[0].label;
+            document.getElementById('sim-btn-opt-1').textContent = ph.options[1].label;
+            panel.classList.add('active');
+        } else {
+            panel.classList.remove('active');
+        }
+
+        // Update progress dots
+        const dotsWrap = document.getElementById('sim-dots');
+        dotsWrap.innerHTML = '';
+        simState.scen.phases.forEach((_, idx) => {
+            const d = document.createElement('div');
+            d.className = 'sim-dot' + (idx < simState.phaseIdx ? ' filled' : idx === simState.phaseIdx ? ' current' : '');
+            dotsWrap.appendChild(d);
+        });
+    }
+
+    function handleSimChoice(choice) {
+        if (simState.status !== 'WAITING') return;
+        simState.isCorrect = !!choice.correct;
+        simState.feedback = choice.feedback || '';
+        simState.targetPositions = deepClone(choice.end);
+        simState.status = 'ANIMATING';
+        simState.animStart = 0;
+
+        document.getElementById('sim-decision-panel').classList.remove('active');
+        document.getElementById('sim-banner').classList.remove('active');
+
+        const isLast = simState.phaseIdx === simState.scen.phases.length - 1;
+        if (simState.isCorrect && isLast) {
+            simState.particles = [];
+            const cols = ['#fde047', '#3b82f6', '#ef4444', '#10b981'];
+            for (let i = 0; i < 80; i++) {
+                simState.particles.push({
+                    x: 200 + (Math.random() - 0.5) * 50,
+                    y: 275,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 1) * 10 - 2,
+                    size: Math.random() * 6 + 4,
+                    color: cols[Math.floor(Math.random() * cols.length)]
+                });
+            }
+        }
+    }
+
+    function showSimResult() {
+        const isLast = simState.phaseIdx === simState.scen.phases.length - 1;
+        const icon = document.getElementById('sim-result-icon');
+        const title = document.getElementById('sim-result-title');
+        const text = document.getElementById('sim-result-text');
+        const btn = document.getElementById('sim-btn-next');
+
+        text.textContent = simState.feedback;
+
+        if (simState.isCorrect) {
+            icon.textContent = isLast ? '⚽🏆' : '✅';
+            title.textContent = isLast ? 'Mål! Perfekt Angreb!' : `Trin ${simState.phaseIdx + 1} Klaret!`;
+            title.style.color = '#15803d';
+            btn.textContent = isLast ? 'Spil scenariet igen' : 'Næste Trin';
+            btn.className = 'sim-btn sim-btn-primary';
+        } else {
+            icon.textContent = '❌';
+            title.textContent = 'Prøv Igen!';
+            title.style.color = '#b91c1c';
+            btn.textContent = 'Prøv dette trin igen';
+            btn.className = 'sim-btn sim-btn-action';
+        }
+        document.getElementById('sim-result-screen').classList.add('active');
+    }
+
+    function renderSim(timestamp) {
+        if (!simState.open) return;
+        const ph = simState.scen.phases[simState.phaseIdx];
+
+        if (simState.status === 'ANIMATING') {
+            if (!simState.animStart) simState.animStart = timestamp;
+            const t = Math.min((timestamp - simState.animStart) / ANIM_DURATION, 1);
+            const easeT = easeOut(t);
+
+            ['p1', 'p2', 'd', 'ball'].forEach(k => {
+                simState.positions[k].x = lerp(ph.start[k].x, simState.targetPositions[k].x, easeT);
+                simState.positions[k].y = lerp(ph.start[k].y, simState.targetPositions[k].y, easeT);
+            });
+
+            if (t >= 1) {
+                simState.status = 'RESULT';
+                showSimResult();
+            }
+        }
+
+        simCtx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
+        drawField(simCtx, false);
+
+        if (simState.status === 'WAITING' && ph.type === 'zone') {
+            ph.zones.forEach(z => drawZoneCircle(simCtx, z, false, true));
+        }
+
+        const p = simState.positions;
+        drawPlayer(simCtx, p.p2.x, p.p2.y, '#3b82f6', '2', ph.actor === 2 && simState.status === 'WAITING');
+        drawPlayer(simCtx, p.d.x,  p.d.y,  '#ef4444', 'F', false);
+        drawPlayer(simCtx, p.p1.x, p.p1.y, '#2563eb', '1', ph.actor === 1 && simState.status === 'WAITING');
+        drawBall(simCtx, p.ball.x, p.ball.y);
+
+        if (simState.status === 'RESULT' && simState.isCorrect && simState.phaseIdx === simState.scen.phases.length - 1) {
+            simState.particles.forEach(pt => {
+                simCtx.fillStyle = pt.color;
+                simCtx.fillRect(pt.x, pt.y, pt.size, pt.size);
+                pt.x += pt.vx;
+                pt.y += pt.vy;
+                pt.vy += 0.1;
+            });
+        }
+
+        simState.rafId = requestAnimationFrame(renderSim);
+    }
+
+    document.getElementById('btn-open-test').addEventListener('click', openTestMode);
+    document.getElementById('btn-close-test').addEventListener('click', closeTestMode);
+
+    document.getElementById('sim-btn-opt-0').addEventListener('click', () => {
+        const ph = simState.scen.phases[simState.phaseIdx];
+        if (ph.type === 'action') handleSimChoice(ph.options[0]);
+    });
+    document.getElementById('sim-btn-opt-1').addEventListener('click', () => {
+        const ph = simState.scen.phases[simState.phaseIdx];
+        if (ph.type === 'action') handleSimChoice(ph.options[1]);
+    });
+
+    function onSimCanvasClick(e) {
+        if (simState.status !== 'WAITING') return;
+        const ph = simState.scen.phases[simState.phaseIdx];
+        if (ph.type !== 'zone') return;
+        const pt = getCanvasCoords(simCanvas, e);
+        for (const z of ph.zones) {
+            if (dist(pt, { x: z.x, y: z.y }) <= z.r + 15) {
+                handleSimChoice(z);
+                break;
+            }
+        }
+    }
+    simCanvas.addEventListener('mousedown', onSimCanvasClick);
+    simCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); onSimCanvasClick(e); }, { passive: false });
+
+    document.getElementById('sim-btn-next').addEventListener('click', () => {
+        if (simState.isCorrect) {
+            simState.phaseIdx++;
+            if (simState.phaseIdx >= simState.scen.phases.length) {
+                simState.phaseIdx = 0;
+            }
+        }
+        initSimPhase();
+    });
+
+    // =========================================================================
+    // INIT
+    // =========================================================================
+    syncUI();
+    requestAnimationFrame(renderEditor);
+})();
+</script>
+</body>
+</html>
