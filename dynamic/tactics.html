@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Taktiktavle Hub • Fodbold Taktik &amp; Beslutningstræning</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        };
+    </script>
+</head>
+<body class="min-h-screen bg-slate-100 text-slate-900 font-sans antialiased flex flex-col selection:bg-emerald-200 selection:text-slate-900">
+
+    <!-- ===================================================================== -->
+    <!-- HERO HEADER MED SUBTILT FODBOLDBANE-MØNSTER                           -->
+    <!-- ===================================================================== -->
+    <header class="relative bg-slate-900 text-white overflow-hidden shadow-lg">
+        <!-- Low-opacity SVG football pitch lines background -->
+        <svg class="absolute inset-0 w-full h-full opacity-[0.09] pointer-events-none select-none" viewBox="0 0 1200 360" preserveAspectRatio="xMidYMid slice" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <!-- Subtle pitch stripes -->
+            <rect x="0" y="0" width="1200" height="360" fill="url(#pitchGrad)" />
+            <!-- Outer boundary & halfway line -->
+            <rect x="40" y="24" width="1120" height="312" rx="4" stroke="#ffffff" stroke-width="2.5" />
+            <line x1="600" y1="24" x2="600" y2="336" stroke="#ffffff" stroke-width="2.5" />
+            <!-- Center circle & spot -->
+            <circle cx="600" cy="180" r="76" stroke="#ffffff" stroke-width="2.5" />
+            <circle cx="600" cy="180" r="5" fill="#ffffff" />
+            <!-- Left penalty box & arc -->
+            <rect x="40" y="76" width="165" height="208" stroke="#ffffff" stroke-width="2.5" />
+            <rect x="40" y="128" width="60" height="104" stroke="#ffffff" stroke-width="2.5" />
+            <path d="M 205 126 A 68 68 0 0 1 205 234" stroke="#ffffff" stroke-width="2.5" />
+            <!-- Right penalty box & arc -->
+            <rect x="995" y="76" width="165" height="208" stroke="#ffffff" stroke-width="2.5" />
+            <rect x="1100" y="128" width="60" height="104" stroke="#ffffff" stroke-width="2.5" />
+            <path d="M 995 126 A 68 68 0 0 0 995 234" stroke="#ffffff" stroke-width="2.5" />
+            <defs>
+                <radialGradient id="pitchGrad" cx="50%" cy="50%" r="65%">
+                    <stop offset="0%" stop-color="#10b981" stop-opacity="0.45" />
+                    <stop offset="100%" stop-color="#0f172a" stop-opacity="0" />
+                </radialGradient>
+            </defs>
+        </svg>
+
+        <!-- Soft emerald glow accent -->
+        <div class="absolute -top-24 left-1/2 -translate-x-1/2 w-[520px] h-[220px] bg-emerald-500/20 blur-3xl rounded-full pointer-events-none"></div>
+
+        <!-- Header Content -->
+        <div class="relative max-w-4xl mx-auto px-4 sm:px-6 py-10 sm:py-14 text-center">
+            <div class="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-950/50 border border-emerald-300/40 text-3xl sm:text-4xl mb-4">
+                ⚽
+            </div>
+
+            <div class="flex justify-center mb-2">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-400/25">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    Fodbold Taktik &amp; Beslutningstræning
+                </span>
+            </div>
+
+            <h1 class="text-3xl sm:text-4xl font-black tracking-tight text-white">
+                Taktiktavle Hub
+            </h1>
+
+            <p class="mt-3 max-w-xl mx-auto text-sm sm:text-base text-slate-300 font-medium leading-relaxed">
+                Vælg en app nedenfor for at træne spilforståelse eller bygge nye scenarier.
+            </p>
+        </div>
+    </header>
+
+    <!-- ===================================================================== -->
+    <!-- MAIN CONTENT: DYNAMIC SECTIONS                                        -->
+    <!-- ===================================================================== -->
+    <main class="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-10">
+
+        <!-- SECTION 1: TIL SPILLERE (Prominent cards) -->
+        <section aria-labelledby="heading-players">
+            <div class="flex items-center justify-between gap-3 mb-4">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-base font-bold">
+                        🏃
+                    </span>
+                    <div>
+                        <h2 id="heading-players" class="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight leading-tight">
+                            Til Spillere
+                        </h2>
+                        <p class="text-xs text-slate-500 font-medium">
+                            Interaktive øvelser direkte på mobil, tablet eller computer
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="grid-players" class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                <!-- Rendered dynamically from APPS -->
+            </div>
+        </section>
+
+        <!-- SECTION 2: TRÆNER-VÆRKTØJER (Compact, clean cards) -->
+        <section aria-labelledby="heading-coaches">
+            <div class="flex items-center justify-between gap-3 mb-4">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-8 h-8 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center text-base font-bold">
+                        📋
+                    </span>
+                    <div>
+                        <h2 id="heading-coaches" class="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight leading-tight">
+                            Træner-værktøjer
+                        </h2>
+                        <p class="text-xs text-slate-500 font-medium">
+                            Byg, test og eksportér nye taktiske scenarier til holdet
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="grid-coaches" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Rendered dynamically from APPS -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ===================================================================== -->
+    <!-- MINIMAL FOOTER                                                        -->
+    <!-- ===================================================================== -->
+    <footer class="mt-auto border-t border-slate-200 bg-white/70">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+            <p class="font-semibold text-slate-600">
+                ⚽ Taktiktavle Hub • Fodbold Beslutningstræning
+            </p>
+            <p>
+                Tip: Gem siden på hjemmeskærmen på mobilen for hurtig adgang til træning.
+            </p>
+        </div>
+    </footer>
+
+<script>
+// =============================================================================
+// KONFIGURATION: REDIGÉR, TILFØJ ELLER OMBYT DINE APP-LINKS HER
+// Felter:
+//   title       - Navnet på appen
+//   description - Kort beskrivelse til spilleren/træneren
+//   url         - Filnavn eller fuldt link (f.eks. "taktik_traener_5v5.html")
+//   category    - "player" (Til Spillere) eller "coach" (Træner-værktøjer)
+//   badge       - Lille mærkat øverst på kortet
+//   icon        - Emoji-ikon
+//   accentColor - "emerald" | "blue" | "slate" | "amber"
+// =============================================================================
+const APPS = [
+    // --- TIL SPILLERE ---
+    {
+        title: "Taktik-Træner (Op til 5v5)",
+        description: "Træn beslutningstagning, løbemønstre og sammenspil i interaktive 3-trins scenarier.",
+        url: "taktik_traener_5v5.html",
+        category: "player",
+        badge: "Spiller • 1v0–5v5",
+        icon: "🚀",
+        accentColor: "emerald"
+    },
+    {
+        title: "3-Trins Raketten (Klassisk 2v1)",
+        description: "Klassiske 2 mod 1 øvelser med fokus på vægspil, timing og afleveringsvalg.",
+        url: "3-trins-raketten.html",
+        category: "player",
+        badge: "Spiller • 2v1",
+        icon: "⚽",
+        accentColor: "blue"
+    },
+
+    // --- TRÆNER-VÆRKTØJER ---
+    {
+        title: "Scenarie-Bygger (Op til 5v5)",
+        description: "Design, animér og eksportér nye taktiske scenarier fra 1v0 helt op til 5v5.",
+        url: "taktiktavle_5v5.html",
+        category: "coach",
+        badge: "Træner • 5v5",
+        icon: "🛠️",
+        accentColor: "slate"
+    },
+    {
+        title: "Scenarie-Bygger (Klassisk 2v1)",
+        description: "Den oprindelige scenarie-bygger til hurtige 2v1-øvelser.",
+        url: "scenarie-bygger.html",
+        category: "coach",
+        badge: "Træner • 2v1",
+        icon: "📐",
+        accentColor: "amber"
+    }
+];
+
+// =============================================================================
+// DYNAMIC CARD RENDERING
+// =============================================================================
+(() => {
+    // Explicit Tailwind class maps so CDN JIT generates every utility reliably
+    const ACCENT_STYLES = {
+        emerald: {
+            hoverBorder: 'hover:border-emerald-400',
+            iconBg: 'bg-emerald-50 text-emerald-700 border-emerald-200/70',
+            badge: 'bg-emerald-100 text-emerald-800',
+            ctaText: 'text-emerald-700 group-hover:text-emerald-600'
+        },
+        blue: {
+            hoverBorder: 'hover:border-blue-400',
+            iconBg: 'bg-blue-50 text-blue-700 border-blue-200/70',
+            badge: 'bg-blue-100 text-blue-800',
+            ctaText: 'text-blue-700 group-hover:text-blue-600'
+        },
+        slate: {
+            hoverBorder: 'hover:border-slate-400',
+            iconBg: 'bg-slate-100 text-slate-800 border-slate-200',
+            badge: 'bg-slate-200 text-slate-800',
+            ctaText: 'text-slate-700 group-hover:text-slate-900'
+        },
+        amber: {
+            hoverBorder: 'hover:border-amber-400',
+            iconBg: 'bg-amber-50 text-amber-700 border-amber-200/70',
+            badge: 'bg-amber-100 text-amber-800',
+            ctaText: 'text-amber-700 group-hover:text-amber-600'
+        }
+    };
+
+    function escapeHtml(str) {
+        return String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function createAppCard(app, isPlayer) {
+        const theme = ACCENT_STYLES[app.accentColor] || ACCENT_STYLES.emerald;
+        const link = document.createElement('a');
+        link.href = app.url;
+
+        // Player cards are slightly larger and more prominent; coach cards are crisp & compact
+        const paddingClass = isPlayer ? 'p-6' : 'p-5';
+        const iconSizeClass = isPlayer ? 'w-12 h-12 text-2xl' : 'w-10 h-10 text-xl';
+        const titleSizeClass = isPlayer ? 'text-lg sm:text-xl' : 'text-base sm:text-lg';
+        const ctaLabel = isPlayer ? 'Åbn øvelser' : 'Åbn bygger';
+
+        link.className = [
+            'group block bg-white rounded-2xl border-2 border-slate-200/80 shadow-sm',
+            'transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-lg',
+            'focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2',
+            'flex flex-col justify-between gap-4',
+            paddingClass,
+            theme.hoverBorder
+        ].join(' ');
+
+        link.innerHTML = `
+            <div>
+                <div class="flex items-start justify-between gap-3 mb-3.5">
+                    <div class="${iconSizeClass} rounded-2xl border flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105 ${theme.iconBg}">
+                        ${escapeHtml(app.icon)}
+                    </div>
+                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-extrabold tracking-wide ${theme.badge}">
+                        ${escapeHtml(app.badge)}
+                    </span>
+                </div>
+
+                <h3 class="${titleSizeClass} font-extrabold text-slate-900 tracking-tight leading-snug">
+                    ${escapeHtml(app.title)}
+                </h3>
+
+                <p class="mt-1.5 text-sm text-slate-600 leading-relaxed">
+                    ${escapeHtml(app.description)}
+                </p>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 flex items-center justify-between text-sm font-bold ${theme.ctaText}">
+                <span>${ctaLabel}</span>
+                <span class="inline-flex items-center transition-transform duration-200 group-hover:translate-x-1.5" aria-hidden="true">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                    </svg>
+                </span>
+            </div>
+        `;
+
+        return link;
+    }
+
+    function renderHub() {
+        const playersGrid = document.getElementById('grid-players');
+        const coachesGrid = document.getElementById('grid-coaches');
+
+        playersGrid.innerHTML = '';
+        coachesGrid.innerHTML = '';
+
+        APPS.forEach(app => {
+            if (app.category === 'player') {
+                playersGrid.appendChild(createAppCard(app, true));
+            } else {
+                coachesGrid.appendChild(createAppCard(app, false));
+            }
+        });
+    }
+
+    window.addEventListener('load', renderHub);
+})();
+</script>
+</body>
+</html>
